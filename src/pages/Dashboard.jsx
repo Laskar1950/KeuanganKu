@@ -8,7 +8,7 @@ import { currentMonthYear } from '../utils/format.js';
 import { getBudgetUsage, getExpenseByCategory, getMonthTransactions, getTotalBalance, sumByType } from '../utils/calculations.js';
 
 export default function Dashboard({ onAddTransaction, goTo }) {
-  const { user, household, transactions, categories, accountBalances, budgets, savingGoals } = useApp();
+  const { user, household, familyMembers, transactions, categories, accountBalances, budgets, savingGoals } = useApp();
   const { month, year } = currentMonthYear();
   const monthTransactions = useMemo(() => getMonthTransactions(transactions, month, year), [transactions, month, year]);
   const income = sumByType(monthTransactions, 'income');
@@ -49,6 +49,43 @@ export default function Dashboard({ onAddTransaction, goTo }) {
       </section>
 
       <Card>
+  <SectionHead
+    kicker="Keluarga"
+    title="Anggota & Dompet"
+    action={<button className="small-btn" onClick={() => goTo('settings')}>Kelola</button>}
+  />
+
+  <div className="family-mini-grid">
+    <div>
+      <p className="mini-label">Anggota</p>
+      <p className="mini-value">{familyMembers.length}</p>
+    </div>
+
+    <div>
+      <p className="mini-label">Kode Undangan</p>
+      <p className="invite-code-inline">{household?.inviteCode || '-'}</p>
+    </div>
+  </div>
+
+  <div className="wallet-summary-list">
+    {accountBalances.filter((acc) => acc.isActive).slice(0, 4).map((account) => (
+      <div className="wallet-summary-item" key={account.id}>
+        <div className="wallet-summary-icon">
+          <Wallet size={17} />
+        </div>
+
+        <div>
+          <p>{account.name}</p>
+          <span>{account.type}</span>
+        </div>
+
+        <strong>{formatRupiah(account.currentBalance)}</strong>
+      </div>
+    ))}
+  </div>
+</Card>
+
+      <Card>
         <SectionHead kicker="Anggaran" title={monthLabel(month, year)} action={<button className="small-btn" onClick={() => goTo('budgets')}>Lihat</button>} />
         {monthBudgets.length === 0 ? (
           <p className="muted tiny">Belum ada anggaran bulan ini.</p>
@@ -82,7 +119,7 @@ export default function Dashboard({ onAddTransaction, goTo }) {
 
       <Card>
         <SectionHead kicker="Transaksi" title="Terbaru" action={<button className="small-btn" onClick={() => goTo('transactions')}>Semua</button>} />
-        <TransactionList transactions={transactions.slice(0, 5)} categories={categories} accounts={accountBalances} />
+        <TransactionList transactions={transactions.slice(0, 5)} categories={categories} accounts={accountBalances} compact />
       </Card>
     </div>
   );
