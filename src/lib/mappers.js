@@ -1,16 +1,33 @@
 export const toProfile = (row, authUser) => ({
   id: row?.id || authUser?.id,
-  name: row?.name || authUser?.user_metadata?.name || authUser?.email?.split('@')[0] || 'Pengguna',
+  name:
+    row?.name ||
+    authUser?.user_metadata?.name ||
+    authUser?.email?.split('@')[0] ||
+    'Pengguna',
   email: row?.email || authUser?.email || '',
   createdAt: row?.created_at || authUser?.created_at,
 });
 
-export const toHousehold = (row) => row ? ({
+export const toHousehold = (row) =>
+  row
+    ? {
+        id: row.id,
+        name: row.name,
+        ownerUserId: row.owner_user_id,
+        inviteCode: row.invite_code || '',
+        createdAt: row.created_at,
+      }
+    : null;
+
+export const toFamilyMember = (row) => ({
   id: row.id,
-  name: row.name,
-  ownerUserId: row.owner_user_id,
+  familyId: row.family_id,
+  userId: row.user_id,
+  role: row.role,
   createdAt: row.created_at,
-}) : null;
+  profile: row.profiles ? toProfile(row.profiles) : null,
+});
 
 export const toCategory = (row) => ({
   id: row.id,
@@ -38,6 +55,7 @@ export const toTransaction = (row) => ({
   accountId: row.account_id,
   categoryId: row.category_id,
   createdBy: row.created_by,
+  createdByProfile: row.profiles ? toProfile(row.profiles) : null,
   type: row.type,
   amount: Number(row.amount || 0),
   transactionDate: row.transaction_date,
