@@ -249,11 +249,29 @@ export function AppProvider({ children }) {
       throw new Error('Nama keluarga dan akun/dompet wajib diisi.');
     }
 
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+
+if (authError) throw authError;
+
+const authUser = authData.user;
+
+if (!authUser?.id) {
+  throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+}
+
+const { error: profileError } = await supabase.from('profiles').upsert({
+  id: authUser.id,
+  name: state.user?.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Pengguna',
+  email: authUser.email,
+});
+
+if (profileError) throw profileError;
+
     const { data: family, error: familyError } = await supabase
       .from('families')
       .insert({
         name: householdName,
-        owner_user_id: state.user.id,
+        owner_user_id: authUser.id,
       })
       .select('*')
       .single();
