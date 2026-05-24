@@ -1,0 +1,32 @@
+{
+  "name": "family-finance-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MVP web app kelola keuangan keluarga mobile-first sesuai PRD.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset",
+    "supabase:push": "supabase db push"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest",
+    "framer-motion": "latest",
+    "recharts": "latest",
+    "@supabase/supabase-js": "latest"
+  },
+  "devDependencies": {
+    "eslint": "latest",
+    "eslint-plugin-react": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest"
+  }
+}
