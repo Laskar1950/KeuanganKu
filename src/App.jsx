@@ -20,13 +20,14 @@ function AppContent() {
   const [editingTransaction, setEditingTransaction] = useState(null);
 
   if (loading) {
-  return (
-    <>
-      <Toast message={toast} />
-      <GlassLoading />
-    </>
-  );
-}
+    return (
+      <>
+        <Toast message={toast} />
+        <GlassLoading />
+      </>
+    );
+  }
+
   if (!user) return <><Toast message={toast} /><AuthPage /></>;
   if (!household) return <><Toast message={toast} /><OnboardingPage /></>;
 
@@ -37,6 +38,8 @@ function AppContent() {
 
   const renderPage = () => {
     if (activeTab === 'transactions') return <Transactions onEdit={openEdit} />;
+    if (activeTab === 'family') return <Settings view="family" />;
+    if (activeTab === 'profile') return <Settings view="profile" />;
     if (activeTab === 'budgets') return <Budgets />;
     if (activeTab === 'reports') return <Reports />;
     if (activeTab === 'settings') return <Settings />;
@@ -68,5 +71,4 @@ export default function App() {
       <AppContent />
     </AppProvider>
   );
-  //cek//
 }
