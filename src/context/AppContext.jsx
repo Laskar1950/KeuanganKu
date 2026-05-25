@@ -63,6 +63,11 @@ export function AppProvider({ children }) {
     return membership?.families ? toHousehold(membership.families) : null;
   }, []);
 
+  const clearInvalidSession = useCallback(async () => {
+    await supabase.auth.signOut();
+    setState(emptyState);
+  }, []);
+
   const refreshData = useCallback(async (sessionOverride = null) => {
     requireSupabaseEnv();
     setLoading(true);
@@ -75,7 +80,15 @@ export function AppProvider({ children }) {
         return;
       }
 
-      const user = await fetchProfile(session.user);
+      const { data: authUserData, error: authUserError } = await supabase.auth.getUser();
+
+      if (authUserError || !authUserData?.user?.id) {
+        await clearInvalidSession();
+        return;
+      }
+
+      const authUser = authUserData.user;
+      const user = await fetchProfile(authUser);
       const household = await fetchHousehold();
 
       if (!household) {
@@ -83,14 +96,7 @@ export function AppProvider({ children }) {
         return;
       }
 
-      const [
-        membersRes,
-        categoriesRes,
-        accountsRes,
-        transactionsRes,
-        budgetsRes,
-        goalsRes,
-      ] = await Promise.all([
+      const [membersRes, categoriesRes, accountsRes, transactionsRes, budgetsRes, goalsRes] = await Promise.all([
         supabase
           .from('family_members')
           .select('*, profiles(id, name, email, created_at)')
@@ -131,14 +137,7 @@ export function AppProvider({ children }) {
           .order('created_at', { ascending: false }),
       ]);
 
-      const error =
-        membersRes.error ||
-        categoriesRes.error ||
-        accountsRes.error ||
-        transactionsRes.error ||
-        budgetsRes.error ||
-        goalsRes.error;
-
+      const error = membersRes.error || categoriesRes.error || accountsRes.error || transactionsRes.error || budgetsRes.error || goalsRes.error;
       if (error) throw error;
 
       setState({
@@ -155,7 +154,7 @@ export function AppProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchHousehold, fetchProfile]);
+  }, [clearInvalidSession, fetchHousehold, fetchProfile]);
 
   useEffect(() => {
     let mounted = true;
@@ -250,22 +249,20 @@ export function AppProvider({ children }) {
     }
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
 
-if (authError) throw authError;
+    const authUser = authData.user;
+    if (!authUser?.id) {
+      throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+    }
 
-const authUser = authData.user;
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: authUser.id,
+      name: state.user?.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Pengguna',
+      email: authUser.email,
+    });
 
-if (!authUser?.id) {
-  throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
-}
-
-const { error: profileError } = await supabase.from('profiles').upsert({
-  id: authUser.id,
-  name: state.user?.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Pengguna',
-  email: authUser.email,
-});
-
-if (profileError) throw profileError;
+    if (profileError) throw profileError;
 
     const { data: family, error: familyError } = await supabase
       .from('families')
@@ -280,7 +277,7 @@ if (profileError) throw profileError;
 
     const { error: memberError } = await supabase.from('family_members').insert({
       family_id: family.id,
-      user_id: state.user.id,
+      user_id: authUser.id,
       role: 'owner',
     });
 
