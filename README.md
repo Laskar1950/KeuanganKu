@@ -10,6 +10,7 @@ Project ini sudah memakai:
 - Row Level Security untuk isolasi data per keluarga/user
 - Supabase migration SQL
 - Local state dari data Supabase, bukan localStorage
+- Glassmorphism UI refresh dengan loading state modern
 
 ## 1. Prasyarat
 
@@ -30,10 +31,16 @@ Install:
 supabase/migrations/20260524000100_initial_schema.sql
 ```
 
-4. Buka Project Settings > API.
-5. Copy `Project URL` dan `anon public key`.
-6. Copy `.env.example` menjadi `.env.local`.
-7. Isi:
+4. Jika project sudah menggunakan invite keluarga, jalankan juga:
+
+```txt
+supabase/migrations/20260524000200_family_invites.sql
+```
+
+5. Buka Project Settings > API.
+6. Copy `Project URL` dan `anon public key`.
+7. Copy `.env.example` menjadi `.env.local`.
+8. Isi:
 
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
@@ -76,12 +83,13 @@ http://localhost:5173
 
 1. Register akun dengan email dan password.
 2. Login.
-3. Isi onboarding:
+3. Pilih buat keluarga baru atau gabung memakai kode undangan.
+4. Jika membuat keluarga baru, isi:
    - Nama keluarga
    - Akun/dompet awal
    - Saldo awal
-4. Masuk ke dashboard.
-5. Tambahkan transaksi, anggaran, akun/dompet, dan target tabungan.
+5. Masuk ke dashboard keluarga.
+6. Tambahkan transaksi, anggaran, akun/dompet, dan target tabungan.
 
 ## 6. Struktur Folder
 
@@ -104,7 +112,8 @@ family-finance-manager/
 ├── supabase/
 │   ├── config.toml
 │   └── migrations/
-│       └── 20260524000100_initial_schema.sql
+│       ├── 20260524000100_initial_schema.sql
+│       └── 20260524000200_family_invites.sql
 ├── .env.example
 ├── package.json
 └── README.md
@@ -124,10 +133,11 @@ family-finance-manager/
 
 ## 8. Catatan MVP
 
-- MVP memakai satu keluarga utama per user.
-- Multi-member keluarga sudah disiapkan pada schema, tetapi invitation flow belum dibuat.
-- Saldo akun dihitung di frontend dari saldo awal + transaksi.
-- Data sensitif sudah diproteksi dengan RLS berbasis membership keluarga.
+- MVP memakai keluarga/household sebagai ruang data bersama.
+- Member keluarga dapat bergabung menggunakan kode undangan.
+- Saldo akun dihitung dari saldo awal + transaksi pada masing-masing dompet.
+- Total saldo keluarga dihitung dari seluruh saldo dompet aktif.
+- Data sensitif diproteksi dengan RLS berbasis membership keluarga.
 - Fitur export PDF/Excel, OCR, integrasi bank, recurring transaction, dan reminder belum masuk MVP.
 
 ## 9. Build Production
@@ -143,3 +153,7 @@ Untuk deploy ke Vercel/Netlify, tambahkan environment variable:
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
+
+## 10. Deployment Note
+
+Commit ini dibuat untuk memastikan Vercel mengambil versi terbaru yang sudah mengekspor komponen `GlassLoading` dari `src/components/UI.jsx`.
