@@ -1,7 +1,7 @@
 import React from 'react';
 
 export function Card({ children, className = '' }) {
-  return <section className={`card ${className}`}>{children}</section>;
+  return <section className={`card glass-card ${className}`}>{children}</section>;
 }
 
 export function SectionHead({ kicker, title, action }) {
@@ -18,6 +18,7 @@ export function SectionHead({ kicker, title, action }) {
 
 export function ProgressBar({ value, variant = '' }) {
   const safeValue = Math.max(0, Math.min(Number(value || 0), 100));
+
   return (
     <div className={`progress ${variant}`}>
       <div style={{ width: `${safeValue}%` }} />
@@ -32,7 +33,7 @@ export function StatusPill({ status }) {
 
 export function EmptyState({ emoji = '📝', title, description }) {
   return (
-    <div className="empty">
+    <div className="empty glass-empty">
       <div className="emoji">{emoji}</div>
       <h3>{title}</h3>
       <p className="muted tiny">{description}</p>
@@ -42,9 +43,10 @@ export function EmptyState({ emoji = '📝', title, description }) {
 
 export function Toast({ message }) {
   if (!message) return null;
-  return <div className="toast">{message}</div>;
+  return <div className="toast glass-toast">{message}</div>;
+}
 
-  export function GlassLoading() {
+export function GlassLoading() {
   return (
     <div className="auth-wrap glass-auth-wrap">
       <div className="loading-card">
@@ -67,5 +69,4 @@ export function Toast({ message }) {
       </div>
     </div>
   );
-}
 }
