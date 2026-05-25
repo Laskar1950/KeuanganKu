@@ -1,0 +1,258 @@
+/* Preview-matched glass UI additions */
+
+.preview-header {
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.family-title-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--ink);
+  padding: 5px 2px;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+
+.notification-btn {
+  position: relative;
+}
+
+.notif-dot {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  min-width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 950;
+  border: 2px solid rgba(255,255,255,.86);
+}
+
+.preview-balance-card {
+  padding: 17px;
+}
+
+.hero-caption {
+  margin: -8px 0 0;
+  color: #7886a0;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.soft-round-btn {
+  width: 44px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #6374f7;
+  background: rgba(255,255,255,.52);
+  border: 1px solid rgba(255,255,255,.72);
+  box-shadow: 0 8px 20px rgba(79,109,245,.10);
+}
+
+.metric-glass {
+  min-height: 104px;
+  position: relative;
+}
+
+.metric-glass .metric-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.metric-icon.income {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.metric-icon.expense {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.metric-glass p {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.metric-glass strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.metric-glass span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.income-glass p,
+.income-glass strong {
+  color: var(--green);
+}
+
+.expense-glass p,
+.expense-glass strong {
+  color: var(--red);
+}
+
+.family-code-grid {
+  gap: 10px;
+}
+
+.info-glass {
+  position: relative;
+  text-align: left;
+  padding: 12px;
+  min-height: 72px;
+}
+
+.info-glass p {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 850;
+}
+
+.info-glass strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: .02em;
+}
+
+.info-glass svg {
+  position: absolute;
+  right: 13px;
+  bottom: 13px;
+  color: #5c6df7;
+}
+
+.preview-section-card .section-head h2 {
+  font-size: 14px;
+}
+
+.link-chip {
+  background: transparent;
+  color: var(--blue);
+  font-size: 10.5px;
+  font-weight: 950;
+  padding: 4px 0;
+}
+
+.preview-wallet-list {
+  gap: 4px;
+}
+
+.preview-wallet-row {
+  padding: 8px 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255,255,255,.54);
+}
+
+.preview-wallet-row:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.preview-wallet-row:last-child {
+  border-bottom: 0;
+}
+
+.wallet-cash { color: #16a34a; }
+.wallet-bank { color: #1d4ed8; }
+.wallet-ewallet { color: #0891b2; }
+.wallet-saving { color: #7c3aed; }
+
+.transactions-preview-page .transaction-list {
+  gap: 12px;
+}
+
+.transactions-list-card {
+  display: grid;
+  gap: 12px;
+}
+
+.preview-page-header {
+  margin-bottom: 2px;
+}
+
+.search-filter-row {
+  align-items: center;
+}
+
+.preview-searchbar {
+  min-height: 48px;
+}
+
+.filter-icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 20px;
+}
+
+.preview-filter-row .filter-chip.all.active {
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff;
+}
+
+.preview-filter-row .filter-chip.income:not(.active) {
+  color: var(--green);
+  background: rgba(21,166,106,.10);
+}
+
+.preview-filter-row .filter-chip.expense:not(.active) {
+  color: var(--red);
+  background: rgba(239,61,95,.10);
+}
+
+.bottom-nav {
+  grid-template-columns: 1fr 1fr 76px 1fr 1fr;
+}
+
+.nav-spacer {
+  min-height: 44px;
+}
+
+.fab {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 50px;
+  width: 58px;
+  height: 58px;
+}
+
+.fab:hover {
+  transform: translateX(-50%) translateY(-3px) scale(1.03);
+}
+
+@media (max-width: 390px) {
+  .fab {
+    left: 50%;
+    right: auto;
+    bottom: 50px;
+  }
+}
