@@ -43,4 +43,29 @@ export function EmptyState({ emoji = '📝', title, description }) {
 export function Toast({ message }) {
   if (!message) return null;
   return <div className="toast">{message}</div>;
+
+  export function GlassLoading() {
+  return (
+    <div className="auth-wrap glass-auth-wrap">
+      <div className="loading-card">
+        <div className="loading-orb" />
+
+        <div>
+          <h1 className="auth-title">Memuat data...</h1>
+          <p className="auth-sub">Menghubungkan aplikasi dengan Supabase.</p>
+        </div>
+
+        <div className="skeleton-list">
+          <div className="skeleton-line long" />
+          <div className="skeleton-line medium" />
+
+          <div className="skeleton-grid">
+            <div className="skeleton-box" />
+            <div className="skeleton-box" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 }
