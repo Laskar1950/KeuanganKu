@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import TransactionSheet from './components/TransactionSheet.jsx';
-import { Toast } from './components/UI.jsx';
+import { GlassLoading, Toast } from './components/UI.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import OnboardingPage from './pages/OnboardingPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -19,7 +19,14 @@ function AppContent() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
-  if (loading) return <><Toast message={toast} /><div className="auth-wrap"><div className="auth-card"><h1 className="auth-title">Memuat data...</h1><p className="auth-sub">Menghubungkan aplikasi dengan Supabase.</p></div></div></>;
+  if (loading) {
+  return (
+    <>
+      <Toast message={toast} />
+      <GlassLoading />
+    </>
+  );
+}
   if (!user) return <><Toast message={toast} /><AuthPage /></>;
   if (!household) return <><Toast message={toast} /><OnboardingPage /></>;
 
