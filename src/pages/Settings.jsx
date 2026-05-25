@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Camera, Copy, LogOut, Save, UserRound, Wallet } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, Copy, LogOut, Save, Upload, UserRound, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { supabase } from '../lib/supabaseClient.js';
@@ -50,6 +50,8 @@ export default function Settings({ view = 'family' }) {
     refreshData,
   } = useApp();
 
+  const fileInputRef = useRef(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: '', avatarUrl: '' });
   const [accountForm, setAccountForm] = useState({ name: '', type: 'cash', initialBalance: '' });
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', currentAmount: '', targetDate: '', note: '' });
@@ -62,6 +64,27 @@ export default function Settings({ view = 'family' }) {
     });
   }, [user?.name, user?.avatarUrl]);
 
+  const saveProfileData = async ({ name, avatarUrl }) => {
+    const payload = {
+      id: user.id,
+      name: name.trim(),
+      email: user.email,
+      avatar_url: avatarUrl?.trim() || null,
+    };
+
+    const { error: profileError } = await supabase.from('profiles').upsert(payload);
+    if (profileError) throw profileError;
+
+    const { error: authError } = await supabase.auth.updateUser({
+      data: {
+        name: payload.name,
+        avatar_url: payload.avatar_url,
+      },
+    });
+
+    if (authError) throw authError;
+  };
+
   const submitProfile = async (event) => {
     event.preventDefault();
 
@@ -70,29 +93,50 @@ export default function Settings({ view = 'family' }) {
         throw new Error('Nama profil wajib diisi.');
       }
 
-      const payload = {
-        id: user.id,
-        name: profileForm.name.trim(),
-        email: user.email,
-        avatar_url: profileForm.avatarUrl.trim() || null,
-      };
-
-      const { error: profileError } = await supabase.from('profiles').upsert(payload);
-      if (profileError) throw profileError;
-
-      const { error: authError } = await supabase.auth.updateUser({
-        data: {
-          name: payload.name,
-          avatar_url: payload.avatar_url,
-        },
-      });
-
-      if (authError) throw authError;
-
+      await saveProfileData({ name: profileForm.name, avatarUrl: profileForm.avatarUrl });
       notify('Profil berhasil diperbarui.');
       await refreshData();
     } catch (error) {
       notify(error.message);
+    }
+  };
+
+  const uploadAvatar = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (!user?.id) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+      if (!file.type.startsWith('image/')) throw new Error('File harus berupa gambar.');
+      if (file.size > 5 * 1024 * 1024) throw new Error('Ukuran foto maksimal 5MB.');
+
+      setUploadingAvatar(true);
+
+      const extension = file.name.split('.').pop() || 'jpg';
+      const filePath = `${user.id}/profile-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+
+      setProfileForm((prev) => ({ ...prev, avatarUrl: publicUrl }));
+      await saveProfileData({ name: profileForm.name || user.name || 'Pengguna', avatarUrl: publicUrl });
+      notify('Foto profil berhasil diupload.');
+      await refreshData();
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setUploadingAvatar(false);
+      if (event.target) event.target.value = '';
     }
   };
 
@@ -154,7 +198,26 @@ export default function Settings({ view = 'family' }) {
 
       <Card className="profile-hero-card">
         <div className="profile-hero-top">
-          <ProfileAvatar user={{ ...user, avatarUrl: profileForm.avatarUrl }} />
+          <div className="avatar-upload-wrap">
+            <ProfileAvatar user={{ ...user, avatarUrl: profileForm.avatarUrl }} />
+            <button
+              className="avatar-upload-btn"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              aria-label="Upload foto profil"
+            >
+              {uploadingAvatar ? '...' : <Camera size={16} />}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={uploadAvatar}
+              hidden
+            />
+          </div>
+
           <div className="profile-hero-info">
             <p className="section-kicker">Profil</p>
             <h2>{user?.name || 'Pengguna'}</h2>
@@ -176,19 +239,19 @@ export default function Settings({ view = 'family' }) {
           </div>
 
           <div className="field">
-            <label>URL foto profil</label>
-            <div className="avatar-url-field">
-              <Camera size={17} />
-              <input
-                value={profileForm.avatarUrl}
-                onChange={(event) => setProfileForm({ ...profileForm, avatarUrl: event.target.value })}
-                placeholder="https://contoh.com/foto.jpg"
-              />
-            </div>
+            <label>Foto profil</label>
+            <button
+              className="upload-photo-btn"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+            >
+              <Upload size={16} /> {uploadingAvatar ? 'Mengupload...' : 'Pilih Foto dari Perangkat'}
+            </button>
           </div>
 
           <p className="muted tiny">
-            Untuk tahap MVP, foto profil menggunakan URL gambar. Nanti bisa ditingkatkan ke upload file Supabase Storage.
+            Format yang didukung: JPG, PNG, WEBP, atau GIF. Maksimal 5MB.
           </p>
 
           <button className="primary-btn" type="submit">
