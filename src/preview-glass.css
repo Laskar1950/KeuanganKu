@@ -21,6 +21,109 @@
   position: relative;
 }
 
+.notification-wrap {
+  position: relative;
+}
+
+.notification-popover {
+  position: absolute;
+  right: 0;
+  top: 54px;
+  z-index: 70;
+  width: min(330px, calc(100vw - 34px));
+  padding: 12px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255,255,255,.88), rgba(255,255,255,.58));
+  border: 1px solid rgba(255,255,255,.82);
+  box-shadow: 0 24px 64px rgba(79,109,245,.24);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.notification-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.notification-head strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.notification-head span {
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  border-radius: 18px;
+  background: rgba(255,255,255,.54);
+  border: 1px solid rgba(255,255,255,.70);
+}
+
+.notification-item:hover {
+  background: rgba(79,109,245,.10);
+  box-shadow: 0 12px 26px rgba(79,109,245,.12);
+}
+
+.notification-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+}
+
+.notification-icon.transaction {
+  background: rgba(79,109,245,.12);
+  color: var(--blue);
+}
+
+.notification-icon.member {
+  background: rgba(21,166,106,.12);
+  color: var(--green);
+}
+
+.notification-item strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 950;
+  margin-bottom: 3px;
+}
+
+.notification-item small {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 750;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notification-empty {
+  margin: 0;
+}
+
 .notif-dot {
   position: absolute;
   right: 7px;
@@ -39,6 +142,12 @@
 
 .preview-balance-card {
   padding: 17px;
+}
+
+.masked-balance,
+.masked-amount {
+  letter-spacing: .08em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .hero-caption {
@@ -375,5 +484,10 @@
     left: 50%;
     right: auto;
     bottom: 50px;
+  }
+
+  .notification-popover {
+    right: -4px;
+    width: calc(100vw - 28px);
   }
 }
