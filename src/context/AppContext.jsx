@@ -32,6 +32,12 @@ function requireSupabaseEnv() {
   }
 }
 
+function assertOwner(member) {
+  if (member?.role !== 'owner') {
+    throw new Error('Aksi ini hanya bisa dilakukan oleh owner keluarga.');
+  }
+}
+
 export function AppProvider({ children }) {
   const [state, setState] = useState(emptyState);
   const [toast, setToast] = useState('');
@@ -186,39 +192,19 @@ export function AppProvider({ children }) {
   const register = async ({ name, email, password }) => {
     requireSupabaseEnv();
 
-    if (!name || !email || !password) {
-      throw new Error('Nama, email, dan password wajib diisi.');
-    }
+    if (!name || !email || !password) throw new Error('Nama, email, dan password wajib diisi.');
+    if (password.length < 6) throw new Error('Password minimal 6 karakter.');
 
-    if (password.length < 6) {
-      throw new Error('Password minimal 6 karakter.');
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } },
-    });
-
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
     if (error) throw error;
 
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        name,
-        email,
-      });
-    }
-
+    if (data.user) await supabase.from('profiles').upsert({ id: data.user.id, name, email });
     notify('Registrasi berhasil. Silakan login atau cek email jika konfirmasi email aktif.');
   };
 
   const login = async ({ email, password }) => {
     requireSupabaseEnv();
-
-    if (!email || !password) {
-      throw new Error('Email dan password wajib diisi.');
-    }
+    if (!email || !password) throw new Error('Email dan password wajib diisi.');
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -240,39 +226,27 @@ export function AppProvider({ children }) {
   };
 
   const completeOnboarding = async ({ householdName, accountName, accountType, initialBalance }) => {
-    if (!state.user?.id) {
-      throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
-    }
-
-    if (!householdName || !accountName) {
-      throw new Error('Nama keluarga dan akun/dompet wajib diisi.');
-    }
+    if (!state.user?.id) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+    if (!householdName || !accountName) throw new Error('Nama keluarga dan akun/dompet wajib diisi.');
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError) throw authError;
 
     const authUser = authData.user;
-    if (!authUser?.id) {
-      throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
-    }
+    if (!authUser?.id) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
 
     const { error: profileError } = await supabase.from('profiles').upsert({
       id: authUser.id,
       name: state.user?.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Pengguna',
       email: authUser.email,
     });
-
     if (profileError) throw profileError;
 
     const { data: family, error: familyError } = await supabase
       .from('families')
-      .insert({
-        name: householdName,
-        owner_user_id: authUser.id,
-      })
+      .insert({ name: householdName, owner_user_id: authUser.id })
       .select('*')
       .single();
-
     if (familyError) throw familyError;
 
     const { error: memberError } = await supabase.from('family_members').insert({
@@ -280,7 +254,6 @@ export function AppProvider({ children }) {
       user_id: authUser.id,
       role: 'owner',
     });
-
     if (memberError) throw memberError;
 
     const { error: accountError } = await supabase.from('accounts').insert({
@@ -290,7 +263,6 @@ export function AppProvider({ children }) {
       initial_balance: Number(initialBalance || 0),
       is_active: true,
     });
-
     if (accountError) throw accountError;
 
     notify('Keluarga berhasil dibuat. Anda sekarang menjadi owner keluarga.');
@@ -298,18 +270,10 @@ export function AppProvider({ children }) {
   };
 
   const joinFamilyByInviteCode = async (inviteCode) => {
-    if (!state.user?.id) {
-      throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
-    }
+    if (!state.user?.id) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+    if (!inviteCode?.trim()) throw new Error('Kode undangan wajib diisi.');
 
-    if (!inviteCode?.trim()) {
-      throw new Error('Kode undangan wajib diisi.');
-    }
-
-    const { error } = await supabase.rpc('join_family_by_invite_code', {
-      p_invite_code: inviteCode.trim(),
-    });
-
+    const { error } = await supabase.rpc('join_family_by_invite_code', { p_invite_code: inviteCode.trim() });
     if (error) throw error;
 
     notify('Berhasil bergabung ke keluarga.');
@@ -318,24 +282,17 @@ export function AppProvider({ children }) {
 
   const copyInviteCode = async () => {
     const code = state.household?.inviteCode;
-
     if (!code) {
       notify('Kode undangan belum tersedia. Pastikan migration invite sudah dijalankan.');
       return;
     }
-
     await navigator.clipboard.writeText(code);
     notify('Kode undangan keluarga berhasil disalin.');
   };
 
   const addTransaction = async (payload) => {
-    if (!payload.amount || Number(payload.amount) <= 0) {
-      throw new Error('Nominal transaksi wajib lebih besar dari 0.');
-    }
-
-    if (!payload.transactionDate || !payload.categoryId || !payload.accountId) {
-      throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
-    }
+    if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
+    if (!payload.transactionDate || !payload.categoryId || !payload.accountId) throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
 
     const { error } = await supabase.from('transactions').insert({
       family_id: state.household.id,
@@ -347,7 +304,6 @@ export function AppProvider({ children }) {
       transaction_date: payload.transactionDate,
       note: payload.note || null,
     });
-
     if (error) throw error;
 
     notify('Transaksi berhasil disimpan.');
@@ -355,9 +311,7 @@ export function AppProvider({ children }) {
   };
 
   const updateTransaction = async (id, payload) => {
-    if (!payload.amount || Number(payload.amount) <= 0) {
-      throw new Error('Nominal transaksi wajib lebih besar dari 0.');
-    }
+    if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
 
     const { error } = await supabase
       .from('transactions')
@@ -370,7 +324,6 @@ export function AppProvider({ children }) {
         note: payload.note || null,
       })
       .eq('id', id);
-
     if (error) throw error;
 
     notify('Transaksi berhasil diperbarui.');
@@ -385,10 +338,13 @@ export function AppProvider({ children }) {
     await refreshData();
   };
 
+  const currentMember = useMemo(() => {
+    return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
+  }, [state.familyMembers, state.user?.id]);
+
   const addAccount = async (payload) => {
-    if (!payload.name) {
-      throw new Error('Nama akun/dompet wajib diisi.');
-    }
+    assertOwner(currentMember);
+    if (!payload.name) throw new Error('Nama akun/dompet wajib diisi.');
 
     const { error } = await supabase.from('accounts').insert({
       family_id: state.household.id,
@@ -397,31 +353,78 @@ export function AppProvider({ children }) {
       initial_balance: Number(payload.initialBalance || 0),
       is_active: true,
     });
-
     if (error) throw error;
 
     notify('Akun/dompet berhasil ditambahkan.');
     await refreshData();
   };
 
+  const updateAccount = async (id, payload) => {
+    assertOwner(currentMember);
+    if (!payload.name) throw new Error('Nama akun/dompet wajib diisi.');
+
+    const { error } = await supabase
+      .from('accounts')
+      .update({ name: payload.name, type: payload.type || 'cash', initial_balance: Number(payload.initialBalance || 0) })
+      .eq('id', id)
+      .eq('family_id', state.household.id);
+    if (error) throw error;
+
+    notify('Akun/dompet berhasil diperbarui.');
+    await refreshData();
+  };
+
   const toggleAccount = async (id) => {
+    assertOwner(currentMember);
     const account = state.accounts.find((item) => item.id === id);
 
     const { error } = await supabase
       .from('accounts')
       .update({ is_active: !account?.isActive })
-      .eq('id', id);
-
+      .eq('id', id)
+      .eq('family_id', state.household.id);
     if (error) throw error;
 
     notify('Status akun/dompet diperbarui.');
     await refreshData();
   };
 
+  const addCategory = async (payload) => {
+    assertOwner(currentMember);
+    if (!payload.name?.trim()) throw new Error('Nama kategori wajib diisi.');
+
+    const { error } = await supabase.from('categories').insert({
+      family_id: state.household.id,
+      name: payload.name.trim(),
+      type: payload.type || 'expense',
+      is_default: false,
+    });
+    if (error) throw error;
+
+    notify('Kategori berhasil ditambahkan.');
+    await refreshData();
+  };
+
+  const deleteCategory = async (id) => {
+    assertOwner(currentMember);
+    const category = state.categories.find((item) => item.id === id);
+    if (!category) throw new Error('Kategori tidak ditemukan.');
+    if (category.isDefault || !category.familyId) throw new Error('Kategori bawaan tidak bisa dihapus.');
+
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id)
+      .eq('family_id', state.household.id)
+      .eq('is_default', false);
+    if (error) throw error;
+
+    notify('Kategori berhasil dihapus.');
+    await refreshData();
+  };
+
   const addBudget = async (payload) => {
-    if (!payload.categoryId || !payload.amount) {
-      throw new Error('Kategori dan nominal anggaran wajib diisi.');
-    }
+    if (!payload.categoryId || !payload.amount) throw new Error('Kategori dan nominal anggaran wajib diisi.');
 
     const { error } = await supabase.from('budgets').insert({
       family_id: state.household.id,
@@ -430,7 +433,6 @@ export function AppProvider({ children }) {
       year: Number(payload.year),
       amount: Number(payload.amount),
     });
-
     if (error) throw error;
 
     notify('Anggaran berhasil dibuat.');
@@ -446,9 +448,7 @@ export function AppProvider({ children }) {
   };
 
   const addSavingGoal = async (payload) => {
-    if (!payload.name || !payload.targetAmount) {
-      throw new Error('Nama target dan nominal target wajib diisi.');
-    }
+    if (!payload.name || !payload.targetAmount) throw new Error('Nama target dan nominal target wajib diisi.');
 
     const { error } = await supabase.from('saving_goals').insert({
       family_id: state.household.id,
@@ -459,7 +459,6 @@ export function AppProvider({ children }) {
       note: payload.note || null,
       status: 'active',
     });
-
     if (error) throw error;
 
     notify('Target tabungan berhasil dibuat.');
@@ -472,7 +471,6 @@ export function AppProvider({ children }) {
 
     const goal = state.savingGoals.find((item) => item.id === id);
     if (!goal) throw new Error('Target tabungan tidak ditemukan.');
-
     const nextAmount = Number(goal.currentAmount) + Number(amount);
 
     const { error: depositError } = await supabase.from('saving_goal_transactions').insert({
@@ -481,17 +479,12 @@ export function AppProvider({ children }) {
       transaction_date: new Date().toISOString().slice(0, 10),
       note: 'Setoran dari aplikasi',
     });
-
     if (depositError) throw depositError;
 
     const { error: goalError } = await supabase
       .from('saving_goals')
-      .update({
-        current_amount: nextAmount,
-        status: nextAmount >= Number(goal.targetAmount) ? 'completed' : goal.status,
-      })
+      .update({ current_amount: nextAmount, status: nextAmount >= Number(goal.targetAmount) ? 'completed' : goal.status })
       .eq('id', id);
-
     if (goalError) throw goalError;
 
     notify('Setoran tabungan berhasil ditambahkan.');
@@ -499,15 +492,8 @@ export function AppProvider({ children }) {
   };
 
   const accountBalances = useMemo(() => {
-    return state.accounts.map((account) => ({
-      ...account,
-      currentBalance: calculateAccountBalance(account, state.transactions),
-    }));
+    return state.accounts.map((account) => ({ ...account, currentBalance: calculateAccountBalance(account, state.transactions) }));
   }, [state.accounts, state.transactions]);
-
-  const currentMember = useMemo(() => {
-    return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
-  }, [state.familyMembers, state.user?.id]);
 
   const value = {
     ...state,
@@ -528,7 +514,10 @@ export function AppProvider({ children }) {
     updateTransaction,
     deleteTransaction,
     addAccount,
+    updateAccount,
     toggleAccount,
+    addCategory,
+    deleteCategory,
     addBudget,
     deleteBudget,
     addSavingGoal,
