@@ -56,8 +56,6 @@ export default function Dashboard({ goTo }) {
   const notifications = useMemo(() => buildNotifications({ transactions, familyMembers }), [transactions, familyMembers]);
   const unreadCount = notifications.length;
 
-  const money = (value) => (showBalance ? formatRupiah(value) : maskMoney());
-
   const openNotification = (notification) => {
     setNotificationOpen(false);
     goTo(notification.target);
@@ -120,7 +118,9 @@ export default function Dashboard({ goTo }) {
         <div className="row-between">
           <div>
             <p className="label">Total Saldo Keluarga</p>
-            <p className={`balance ${!showBalance ? 'masked-balance' : ''}`}>{money(totalBalance)}</p>
+            <p className={`balance ${!showBalance ? 'masked-balance' : ''}`}>
+              {showBalance ? formatRupiah(totalBalance) : maskMoney()}
+            </p>
             <p className="hero-caption">Diperbarui hari ini</p>
           </div>
           <button
@@ -138,14 +138,14 @@ export default function Dashboard({ goTo }) {
         <div className="glass metric-glass income-glass">
           <div className="metric-icon income"><TrendingUp size={17} /></div>
           <p>Pemasukan</p>
-          <strong className={!showBalance ? 'masked-amount' : ''}>{money(income)}</strong>
+          <strong>{formatRupiah(income)}</strong>
           <span>+12% dari bulan lalu</span>
         </div>
 
         <div className="glass metric-glass expense-glass">
           <div className="metric-icon expense"><TrendingDown size={17} /></div>
           <p>Pengeluaran</p>
-          <strong className={!showBalance ? 'masked-amount' : ''}>{money(expense)}</strong>
+          <strong>{formatRupiah(expense)}</strong>
           <span>-8% dari bulan lalu</span>
         </div>
       </section>
@@ -182,7 +182,7 @@ export default function Dashboard({ goTo }) {
                 <span>{accountTypeLabel[account.type] || 'Akun Keluarga'}</span>
               </div>
 
-              <strong className={!showBalance ? 'masked-amount' : ''}>{money(account.currentBalance)}</strong>
+              <strong>{formatRupiah(account.currentBalance)}</strong>
             </div>
           ))}
         </div>
@@ -193,7 +193,7 @@ export default function Dashboard({ goTo }) {
           title="Transaksi Terbaru"
           action={<button className="link-chip" type="button" onClick={() => goTo('transactions')}>Lihat semua</button>}
         />
-        <TransactionList transactions={transactions.slice(0, 3)} categories={categories} accounts={accountBalances} compact hideAmounts={!showBalance} />
+        <TransactionList transactions={transactions.slice(0, 3)} categories={categories} accounts={accountBalances} compact />
       </Card>
     </div>
   );
