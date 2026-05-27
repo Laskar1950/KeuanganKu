@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, Copy, LogOut, Save, Upload, UserRound, Wallet } from 'lucide-react';
+import { Camera, Copy, KeyRound, LogOut, Save, Upload, UserRound, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { supabase } from '../lib/supabaseClient.js';
@@ -23,11 +23,23 @@ function initials(name = 'Pengguna') {
 function ProfileAvatar({ user, size = 'large' }) {
   return (
     <div className={`profile-avatar ${size}`}>
-      {user?.avatarUrl ? (
-        <img src={user.avatarUrl} alt={user?.name || 'Foto profil'} />
-      ) : (
-        <span>{initials(user?.name)}</span>
-      )}
+      {user?.avatarUrl ? <img src={user.avatarUrl} alt={user?.name || 'Foto profil'} /> : <span>{initials(user?.name)}</span>}
+    </div>
+  );
+}
+
+function MemberAvatar({ member }) {
+  if (member.profile?.avatarUrl) {
+    return (
+      <div className="avatar member-photo">
+        <img src={member.profile.avatarUrl} alt={member.profile.name || 'Anggota'} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="avatar member-initials">
+      <span>{initials(member.profile?.name || 'Anggota')}</span>
     </div>
   );
 }
@@ -53,15 +65,13 @@ export default function Settings({ view = 'family' }) {
   const fileInputRef = useRef(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: '', avatarUrl: '' });
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [accountForm, setAccountForm] = useState({ name: '', type: 'cash', initialBalance: '' });
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', currentAmount: '', targetDate: '', note: '' });
   const [deposit, setDeposit] = useState({ id: '', amount: '' });
 
   useEffect(() => {
-    setProfileForm({
-      name: user?.name || '',
-      avatarUrl: user?.avatarUrl || '',
-    });
+    setProfileForm({ name: user?.name || '', avatarUrl: user?.avatarUrl || '' });
   }, [user?.name, user?.avatarUrl]);
 
   const saveProfileData = async ({ name, avatarUrl }) => {
@@ -76,26 +86,41 @@ export default function Settings({ view = 'family' }) {
     if (profileError) throw profileError;
 
     const { error: authError } = await supabase.auth.updateUser({
-      data: {
-        name: payload.name,
-        avatar_url: payload.avatar_url,
-      },
+      data: { name: payload.name, avatar_url: payload.avatar_url },
     });
-
     if (authError) throw authError;
   };
 
   const submitProfile = async (event) => {
     event.preventDefault();
-
     try {
-      if (!profileForm.name.trim()) {
-        throw new Error('Nama profil wajib diisi.');
-      }
-
+      if (!profileForm.name.trim()) throw new Error('Nama profil wajib diisi.');
       await saveProfileData({ name: profileForm.name, avatarUrl: profileForm.avatarUrl });
       notify('Profil berhasil diperbarui.');
       await refreshData();
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const submitPassword = async (event) => {
+    event.preventDefault();
+    try {
+      if (!passwordForm.password || !passwordForm.confirmPassword) {
+        throw new Error('Password baru dan konfirmasi password wajib diisi.');
+      }
+      if (passwordForm.password.length < 6) {
+        throw new Error('Password minimal 6 karakter.');
+      }
+      if (passwordForm.password !== passwordForm.confirmPassword) {
+        throw new Error('Konfirmasi password tidak sama.');
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.password });
+      if (error) throw error;
+
+      setPasswordForm({ password: '', confirmPassword: '' });
+      notify('Password berhasil diganti. Gunakan password baru saat login berikutnya.');
     } catch (error) {
       notify(error.message);
     }
@@ -111,18 +136,14 @@ export default function Settings({ view = 'family' }) {
       if (file.size > 5 * 1024 * 1024) throw new Error('Ukuran foto maksimal 5MB.');
 
       setUploadingAvatar(true);
-
       const extension = file.name.split('.').pop() || 'jpg';
       const filePath = `${user.id}/profile-${Date.now()}.${extension}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type,
-        });
-
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: file.type,
+      });
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
@@ -170,134 +191,167 @@ export default function Settings({ view = 'family' }) {
     }
   };
 
-  const showProfileOnly = view === 'profile';
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const isProfilePage = view === 'profile';
 
   return (
     <div className="page settings-preview-page">
       <header className="header">
         <div>
-          <p className="eyebrow">{showProfileOnly ? 'Akun pengguna' : 'Kelola keluarga'}</p>
-          <h1>{showProfileOnly ? 'Profil' : 'Pengaturan Keluarga'}</h1>
+          <p className="eyebrow">{isProfilePage ? 'Akun pengguna' : 'Kelola keluarga'}</p>
+          <h1>{isProfilePage ? 'Profil' : 'Pengaturan Keluarga'}</h1>
         </div>
-
-        <button
-          className="icon-btn"
-          onClick={async () => {
-            try {
-              await logout();
-            } catch (error) {
-              notify(error.message);
-            }
-          }}
-          type="button"
-          aria-label="Logout"
-        >
+        <button className="icon-btn" onClick={handleLogout} type="button" aria-label="Logout">
           <LogOut size={18} />
         </button>
       </header>
 
-      <Card className="profile-hero-card">
-        <div className="profile-hero-top">
-          <div className="avatar-upload-wrap">
-            <ProfileAvatar user={{ ...user, avatarUrl: profileForm.avatarUrl }} />
-            <button
-              className="avatar-upload-btn"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              aria-label="Upload foto profil"
-            >
-              {uploadingAvatar ? '...' : <Camera size={16} />}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={uploadAvatar}
-              hidden
-            />
-          </div>
-
-          <div className="profile-hero-info">
-            <p className="section-kicker">Profil</p>
-            <h2>{user?.name || 'Pengguna'}</h2>
-            <p className="muted tiny">{user?.email}</p>
-            <span className={`role-pill ${currentMember?.role || 'member'}`}>
-              {roleLabel[currentMember?.role] || 'Member'}
-            </span>
-          </div>
-        </div>
-
-        <form className="form-grid profile-edit-form" onSubmit={submitProfile}>
-          <div className="field">
-            <label>Nama profil</label>
-            <input
-              value={profileForm.name}
-              onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
-              placeholder="Nama Anda"
-            />
-          </div>
-
-          <div className="field">
-            <label>Foto profil</label>
-            <button
-              className="upload-photo-btn"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-            >
-              <Upload size={16} /> {uploadingAvatar ? 'Mengupload...' : 'Pilih Foto dari Perangkat'}
-            </button>
-          </div>
-
-          <p className="muted tiny">
-            Format yang didukung: JPG, PNG, WEBP, atau GIF. Maksimal 5MB.
-          </p>
-
-          <button className="primary-btn" type="submit">
-            <Save size={16} /> Simpan Profil
-          </button>
-        </form>
-      </Card>
-
-      {!showProfileOnly && (
+      {isProfilePage ? (
         <>
-          <Card>
-            <p className="section-kicker">Keluarga</p>
-            <h2>{household?.name}</h2>
-
-            <div className="invite-box">
-              <div>
-                <p className="mini-label">Kode undangan</p>
-                <strong>{household?.inviteCode || '-'}</strong>
+          <Card className="profile-hero-card">
+            <div className="profile-hero-top">
+              <div className="avatar-upload-wrap">
+                <ProfileAvatar user={{ ...user, avatarUrl: profileForm.avatarUrl }} />
+                <button
+                  className="avatar-upload-btn"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  aria-label="Upload foto profil"
+                >
+                  {uploadingAvatar ? '...' : <Camera size={16} />}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={uploadAvatar}
+                  hidden
+                />
               </div>
 
+              <div className="profile-hero-info">
+                <p className="section-kicker">Profil</p>
+                <h2>{user?.name || 'Pengguna'}</h2>
+                <p className="muted tiny">{user?.email}</p>
+                <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
+              </div>
+            </div>
+
+            <form className="form-grid profile-edit-form" onSubmit={submitProfile}>
+              <div className="field">
+                <label>Nama profil</label>
+                <input
+                  value={profileForm.name}
+                  onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
+                  placeholder="Nama Anda"
+                />
+              </div>
+
+              <div className="field">
+                <label>Foto profil</label>
+                <button className="upload-photo-btn" type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}>
+                  <Upload size={16} /> {uploadingAvatar ? 'Mengupload...' : 'Pilih Foto dari Perangkat'}
+                </button>
+              </div>
+
+              <p className="muted tiny">Format yang didukung: JPG, PNG, WEBP, atau GIF. Maksimal 5MB.</p>
+
+              <button className="primary-btn" type="submit">
+                <Save size={16} /> Simpan Profil
+              </button>
+            </form>
+          </Card>
+
+          <Card className="password-card">
+            <p className="section-kicker">Keamanan</p>
+            <h2>Ganti Password</h2>
+            <p className="muted tiny password-help">Gunakan password minimal 6 karakter agar akun tetap aman.</p>
+
+            <form className="form-grid" onSubmit={submitPassword}>
+              <div className="field">
+                <label>Password baru</label>
+                <input
+                  type="password"
+                  value={passwordForm.password}
+                  onChange={(event) => setPasswordForm({ ...passwordForm, password: event.target.value })}
+                  placeholder="Masukkan password baru"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="field">
+                <label>Konfirmasi password</label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })}
+                  placeholder="Ulangi password baru"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <button className="secondary-btn password-submit-btn" type="submit">
+                <KeyRound size={16} /> Ganti Password
+              </button>
+            </form>
+          </Card>
+        </>
+      ) : (
+        <>
+          <Card className="family-overview-card">
+            <div className="family-cover-row">
+              <div className="family-stack-avatars">
+                {familyMembers.slice(0, 4).map((member, index) => (
+                  <div className="family-stack-avatar" style={{ zIndex: 10 - index }} key={member.id}>
+                    {member.profile?.avatarUrl ? <img src={member.profile.avatarUrl} alt={member.profile.name || 'Anggota'} /> : <span>{initials(member.profile?.name)}</span>}
+                  </div>
+                ))}
+              </div>
+
+              <div className="family-overview-text">
+                <p className="section-kicker">Keluarga</p>
+                <h2>{household?.name}</h2>
+                <p className="muted tiny">{familyMembers.length} anggota tergabung</p>
+              </div>
+            </div>
+
+            <div className="invite-box family-invite-box">
+              <div>
+                <p className="mini-label">Kode undangan keluarga</p>
+                <strong>{household?.inviteCode || '-'}</strong>
+              </div>
               <button className="small-btn" onClick={copyInviteCode} type="button">
                 <Copy size={14} /> Salin
               </button>
             </div>
+          </Card>
 
-            <p className="muted tiny" style={{ marginTop: 10 }}>
-              Bagikan kode ini ke anggota keluarga agar mereka bisa bergabung dan mencatat transaksi bersama.
-            </p>
+          <Card className="family-members-card">
+            <div className="row-between">
+              <div>
+                <p className="section-kicker">Anggota Keluarga</p>
+                <h2>{familyMembers.length} Anggota</h2>
+              </div>
+              <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
+            </div>
 
             <div className="drawer-list" style={{ marginTop: 14 }}>
               {familyMembers.map((member) => (
                 <div className="member-row" key={member.id}>
-                  {member.profile?.avatarUrl ? (
-                    <div className="avatar member-photo"><img src={member.profile.avatarUrl} alt={member.profile.name || 'Anggota'} /></div>
-                  ) : (
-                    <div className="avatar"><UserRound size={18} /></div>
-                  )}
-
+                  <MemberAvatar member={member} />
                   <div className="item-main">
                     <p className="item-title">{member.profile?.name || 'Anggota keluarga'}</p>
                     <p className="item-sub">{member.profile?.email || 'Email tidak tersedia'}</p>
                   </div>
-
-                  <span className={`role-pill ${member.role}`}>
-                    {roleLabel[member.role] || member.role}
-                  </span>
+                  <span className={`role-pill ${member.role}`}>{roleLabel[member.role] || member.role}</span>
                 </div>
               ))}
             </div>
@@ -305,7 +359,6 @@ export default function Settings({ view = 'family' }) {
 
           <Card>
             <p className="section-kicker">Akun & Dompet Keluarga</p>
-
             <div className="drawer-list" style={{ marginTop: 12 }}>
               {accountBalances.map((account) => (
                 <div className="wallet-row" key={account.id}>
@@ -347,10 +400,7 @@ export default function Settings({ view = 'family' }) {
               <div className="grid-2">
                 <div className="field">
                   <label>Jenis</label>
-                  <select
-                    value={accountForm.type}
-                    onChange={(event) => setAccountForm({ ...accountForm, type: event.target.value })}
-                  >
+                  <select value={accountForm.type} onChange={(event) => setAccountForm({ ...accountForm, type: event.target.value })}>
                     <option value="cash">Cash</option>
                     <option value="bank">Bank</option>
                     <option value="ewallet">E-Wallet</option>
@@ -358,7 +408,6 @@ export default function Settings({ view = 'family' }) {
                     <option value="other">Lainnya</option>
                   </select>
                 </div>
-
                 <div className="field">
                   <label>Saldo awal</label>
                   <input
@@ -368,14 +417,12 @@ export default function Settings({ view = 'family' }) {
                   />
                 </div>
               </div>
-
               <button className="secondary-btn">Tambah Akun/Dompet</button>
             </form>
           </Card>
 
           <Card>
             <p className="section-kicker">Target Tabungan</p>
-
             <div className="drawer-list" style={{ marginTop: 12 }}>
               {savingGoals.map((goal) => {
                 const pct = Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100));
