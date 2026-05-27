@@ -59,26 +59,10 @@
   font-weight: 950;
 }
 
-.family-stack-avatar:first-child {
-  margin-left: 0;
-}
-
-.family-stack-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.family-overview-text {
-  position: relative;
-  min-width: 0;
-  flex: 1;
-}
-
-.family-overview-text h2 {
-  margin-bottom: 4px;
-}
+.family-stack-avatar:first-child { margin-left: 0; }
+.family-stack-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.family-overview-text { position: relative; min-width: 0; flex: 1; }
+.family-overview-text h2 { margin-bottom: 4px; }
 
 .settings-preview-page .invite-box,
 .family-invite-box {
@@ -90,15 +74,8 @@
   box-shadow: 0 14px 30px rgba(79,109,245,.12);
 }
 
-.settings-preview-page .invite-box strong {
-  font-size: 22px;
-  color: var(--blue);
-  letter-spacing: .12em;
-}
-
-.settings-preview-page .drawer-list {
-  gap: 9px;
-}
+.settings-preview-page .invite-box strong { font-size: 22px; color: var(--blue); letter-spacing: .12em; }
+.settings-preview-page .drawer-list { gap: 9px; }
 
 .settings-preview-page .member-row,
 .settings-preview-page .wallet-row {
@@ -119,79 +96,49 @@
   color: var(--blue);
 }
 
-.member-initials span {
-  font-size: 13px;
-  font-weight: 950;
-  color: var(--blue);
-}
+.member-initials span { font-size: 13px; font-weight: 950; color: var(--blue); }
+.member-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.family-members-card .row-between { align-items: flex-start; }
+.settings-preview-page .role-pill { white-space: nowrap; }
+.settings-preview-page .form-grid { border-radius: 24px; }
+.settings-preview-page .secondary-btn { min-height: 46px; }
+.settings-preview-page .profile-hero-card { padding: 18px; border-radius: 32px; }
+.settings-preview-page .profile-edit-form { padding-top: 4px; }
+.settings-preview-page .profile-edit-form .muted.tiny { margin: -2px 0 0; line-height: 1.45; }
+.settings-preview-page .upload-photo-btn { min-height: 48px; }
+.settings-preview-page .profile-hero-info .role-pill { margin-top: 7px; display: inline-flex; }
+.password-card h2 { margin-bottom: 6px; }
+.password-help { margin-bottom: 14px; line-height: 1.45; }
+.password-submit-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 
-.member-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
+.wallet-management-row { align-items: flex-start; }
+.wallet-actions { display: grid; gap: 7px; justify-items: end; min-width: 112px; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.owner-only-note { margin: 12px 0 0; line-height: 1.45; }
 
-.family-members-card .row-between {
-  align-items: flex-start;
-}
-
-.settings-preview-page .role-pill {
-  white-space: nowrap;
-}
-
-.settings-preview-page .form-grid {
-  border-radius: 24px;
-}
-
-.settings-preview-page .secondary-btn {
-  min-height: 46px;
-}
-
-.settings-preview-page .profile-hero-card {
-  padding: 18px;
-  border-radius: 32px;
-}
-
-.settings-preview-page .profile-edit-form {
-  padding-top: 4px;
-}
-
-.settings-preview-page .profile-edit-form .muted.tiny {
-  margin: -2px 0 0;
-  line-height: 1.45;
-}
-
-.settings-preview-page .upload-photo-btn {
-  min-height: 48px;
-}
-
-.settings-preview-page .profile-hero-info .role-pill {
-  margin-top: 7px;
-  display: inline-flex;
-}
-
-.password-card h2 {
-  margin-bottom: 6px;
-}
-
-.password-help {
-  margin-bottom: 14px;
-  line-height: 1.45;
-}
-
-.password-submit-btn {
+.category-management-card { overflow: hidden; }
+.category-section { margin-top: 15px; display: grid; gap: 9px; }
+.category-chip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.category-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 950;
+  border: 1px solid rgba(255,255,255,.75);
+  background: rgba(255,255,255,.52);
+  box-shadow: 0 8px 20px rgba(79,109,245,.08);
 }
+.category-chip.income { color: var(--green); background: rgba(21,166,106,.10); }
+.category-chip.expense { color: var(--red); background: rgba(239,61,95,.10); }
+.category-chip.readonly { color: var(--muted); background: rgba(255,255,255,.40); }
+.category-chip em { font-style: normal; opacity: .72; font-size: 10px; }
+.category-chip button { display: grid; place-items: center; color: inherit; background: rgba(255,255,255,.5); border-radius: 999px; width: 22px; height: 22px; }
+.category-chip button:hover { color: #fff; background: var(--red); }
 
-.filter-icon-btn.active {
-  color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--violet));
-}
-
+.filter-icon-btn.active { color: #fff; background: linear-gradient(135deg, var(--blue), var(--violet)); }
 .advanced-filter-card {
   display: grid;
   gap: 13px;
@@ -203,36 +150,15 @@
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
-
-.advanced-filter-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.advanced-filter-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.filter-result-note {
-  margin: 0;
-  line-height: 1.4;
-}
+.advanced-filter-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.advanced-filter-head h2 { margin: 0; font-size: 16px; }
+.filter-result-note { margin: 0; line-height: 1.4; }
 
 @media (max-width: 390px) {
-  .settings-preview-page .invite-box {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .settings-preview-page .invite-box .small-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .family-cover-row {
-    align-items: flex-start;
-  }
+  .settings-preview-page .invite-box { align-items: flex-start; flex-direction: column; }
+  .settings-preview-page .invite-box .small-btn { width: 100%; justify-content: center; }
+  .family-cover-row { align-items: flex-start; }
+  .wallet-management-row { flex-wrap: wrap; }
+  .wallet-actions { width: 100%; justify-items: start; }
+  .inline-actions { justify-content: flex-start; }
 }
