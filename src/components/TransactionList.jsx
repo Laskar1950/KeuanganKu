@@ -24,6 +24,7 @@ export default function TransactionList({
   onEdit,
   onDelete,
   compact = false,
+  hideAmounts = false,
 }) {
   if (!transactions.length) {
     return (
@@ -91,9 +92,8 @@ export default function TransactionList({
             </div>
 
             <div className="transaction-amount-wrap">
-              <p className={`amount ${isIncome ? 'income' : 'expense'}`}>
-                {isIncome ? '+' : '-'}
-                {formatRupiah(trx.amount)}
+              <p className={`amount ${isIncome ? 'income' : 'expense'} ${hideAmounts ? 'masked-amount' : ''}`}>
+                {hideAmounts ? '••••••' : `${isIncome ? '+' : '-'}${formatRupiah(trx.amount)}`}
               </p>
             </div>
           </article>
