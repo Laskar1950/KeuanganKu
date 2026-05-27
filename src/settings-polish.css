@@ -1,0 +1,99 @@
+/* Polished family settings layout */
+
+.settings-preview-page > .card:not(.profile-hero-card) {
+  padding: 16px;
+  border-radius: 30px;
+}
+
+.settings-preview-page > .card:not(.profile-hero-card) > .section-kicker {
+  margin-bottom: 5px;
+}
+
+.settings-preview-page > .card:not(.profile-hero-card) > h2 {
+  margin-bottom: 12px;
+}
+
+.settings-preview-page .invite-box {
+  margin-top: 10px;
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.78), rgba(255,255,255,.42)),
+    radial-gradient(circle at 92% 12%, rgba(155,124,255,.22), transparent 42%);
+  box-shadow: 0 14px 30px rgba(79,109,245,.12);
+}
+
+.settings-preview-page .invite-box strong {
+  font-size: 22px;
+  color: var(--blue);
+  letter-spacing: .12em;
+}
+
+.settings-preview-page .drawer-list {
+  gap: 9px;
+}
+
+.settings-preview-page .member-row,
+.settings-preview-page .wallet-row {
+  border-radius: 22px;
+  background: rgba(255,255,255,.48);
+  border: 1px solid rgba(255,255,255,.70);
+  box-shadow: 0 10px 24px rgba(79,109,245,.08);
+}
+
+.settings-preview-page .member-row:hover,
+.settings-preview-page .wallet-row:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(79,109,245,.14);
+}
+
+.settings-preview-page .avatar {
+  background: linear-gradient(145deg, rgba(255,255,255,.84), rgba(255,255,255,.46));
+  color: var(--blue);
+}
+
+.settings-preview-page .role-pill {
+  white-space: nowrap;
+}
+
+.settings-preview-page .form-grid {
+  border-radius: 24px;
+}
+
+.settings-preview-page .secondary-btn {
+  min-height: 46px;
+}
+
+.settings-preview-page .profile-hero-card {
+  padding: 18px;
+  border-radius: 32px;
+}
+
+.settings-preview-page .profile-edit-form {
+  padding-top: 4px;
+}
+
+.settings-preview-page .profile-edit-form .muted.tiny {
+  margin: -2px 0 0;
+  line-height: 1.45;
+}
+
+.settings-preview-page .upload-photo-btn {
+  min-height: 48px;
+}
+
+.settings-preview-page .profile-hero-info .role-pill {
+  margin-top: 7px;
+  display: inline-flex;
+}
+
+@media (max-width: 390px) {
+  .settings-preview-page .invite-box {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-preview-page .invite-box .small-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
