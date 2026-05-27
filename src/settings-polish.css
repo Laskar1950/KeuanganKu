@@ -13,7 +13,75 @@
   margin-bottom: 12px;
 }
 
-.settings-preview-page .invite-box {
+.family-overview-card {
+  overflow: hidden;
+  position: relative;
+}
+
+.family-overview-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 96px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(126,219,255,.32), transparent 34%),
+    radial-gradient(circle at 82% 8%, rgba(155,124,255,.28), transparent 36%);
+  pointer-events: none;
+}
+
+.family-cover-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.family-stack-avatars {
+  display: flex;
+  align-items: center;
+  min-width: 104px;
+}
+
+.family-stack-avatar {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  margin-left: -10px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff;
+  border: 3px solid rgba(255,255,255,.86);
+  box-shadow: 0 12px 24px rgba(79,109,245,.16);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.family-stack-avatar:first-child {
+  margin-left: 0;
+}
+
+.family-stack-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.family-overview-text {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.family-overview-text h2 {
+  margin-bottom: 4px;
+}
+
+.settings-preview-page .invite-box,
+.family-invite-box {
   margin-top: 10px;
   border-radius: 24px;
   background:
@@ -51,6 +119,23 @@
   color: var(--blue);
 }
 
+.member-initials span {
+  font-size: 13px;
+  font-weight: 950;
+  color: var(--blue);
+}
+
+.member-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.family-members-card .row-between {
+  align-items: flex-start;
+}
+
 .settings-preview-page .role-pill {
   white-space: nowrap;
 }
@@ -86,6 +171,22 @@
   display: inline-flex;
 }
 
+.password-card h2 {
+  margin-bottom: 6px;
+}
+
+.password-help {
+  margin-bottom: 14px;
+  line-height: 1.45;
+}
+
+.password-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 @media (max-width: 390px) {
   .settings-preview-page .invite-box {
     align-items: flex-start;
@@ -95,5 +196,9 @@
   .settings-preview-page .invite-box .small-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .family-cover-row {
+    align-items: flex-start;
   }
 }
