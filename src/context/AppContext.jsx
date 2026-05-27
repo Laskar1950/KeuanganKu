@@ -99,7 +99,7 @@ export function AppProvider({ children }) {
       const [membersRes, categoriesRes, accountsRes, transactionsRes, budgetsRes, goalsRes] = await Promise.all([
         supabase
           .from('family_members')
-          .select('*, profiles(id, name, email, created_at)')
+          .select('*, profiles(id, name, email, avatar_url, created_at)')
           .eq('family_id', household.id)
           .order('created_at', { ascending: true }),
 
@@ -118,7 +118,7 @@ export function AppProvider({ children }) {
 
         supabase
           .from('transactions')
-          .select('*, profiles(id, name, email, created_at)')
+          .select('*, profiles(id, name, email, avatar_url, created_at)')
           .eq('family_id', household.id)
           .order('transaction_date', { ascending: false })
           .order('created_at', { ascending: false }),
