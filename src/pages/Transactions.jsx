@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { ListFilter, RotateCcw, Search } from 'lucide-react';
+import { ListFilter, Plus, RotateCcw, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import TransactionList from '../components/TransactionList.jsx';
+import { Card } from '../components/UI.jsx';
+import { formatRupiah } from '../utils/format.js';
 
-export default function Transactions({ onEdit }) {
+export default function Transactions({ onEdit, onAdd }) {
   const {
     transactions,
     categories,
@@ -66,7 +68,7 @@ export default function Transactions({ onEdit }) {
         matchQuery
       );
     });
-  }, [transactions, categories, accountBalances, familyMembers, query, type, filters]);
+  }, [transactions, categories, accountBalances, query, type, filters]);
 
   const hasAdvancedFilter =
     filters.creatorId !== 'all' ||
@@ -74,6 +76,9 @@ export default function Transactions({ onEdit }) {
     filters.categoryId !== 'all' ||
     filters.startDate ||
     filters.endDate;
+
+  const filteredIncome = filtered.filter((trx) => trx.type === 'income').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
+  const filteredExpense = filtered.filter((trx) => trx.type === 'expense').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
 
   const resetFilters = () => {
     setQuery('');
@@ -96,15 +101,43 @@ export default function Transactions({ onEdit }) {
   };
 
   return (
-    <div className="page transactions-preview-page">
-      <header className="header preview-page-header">
+    <div className="page playful-transactions-page">
+      <header className="header playful-page-header">
         <div>
-          <p className="eyebrow">Daftar keluarga</p>
-          <h1>Transaksi</h1>
+          <p className="eyebrow">Transaksi keluarga</p>
+          <h1>Catatan Keuangan</h1>
         </div>
+        <button className="icon-btn playful-icon-btn" type="button" aria-label="Tambah transaksi" onClick={onAdd}>
+          <Plus size={18} />
+        </button>
       </header>
 
-      <div className="row-between search-filter-row">
+      <Card className="playful-quick-card">
+        <div className="row-between">
+          <div>
+            <p className="section-kicker">Input cepat</p>
+            <h2>Catat transaksi baru</h2>
+          </div>
+          <span className="role-pill owner">Alokasi otomatis</span>
+        </div>
+        <p className="muted tiny quick-copy">Pilih kategori pengeluaran dan alokasi anggaran dari bottom sheet agar sisa budget langsung terhitung.</p>
+        <button className="primary-btn playful-primary-btn" type="button" onClick={onAdd}>
+          <Plus size={16} /> Tambah Transaksi
+        </button>
+      </Card>
+
+      <div className="playful-summary-grid">
+        <div className="playful-stat-card income">
+          <span>Pemasukan tampil</span>
+          <strong>{formatRupiah(filteredIncome)}</strong>
+        </div>
+        <div className="playful-stat-card expense">
+          <span>Pengeluaran tampil</span>
+          <strong>{formatRupiah(filteredExpense)}</strong>
+        </div>
+      </div>
+
+      <div className="row-between search-filter-row playful-search-row">
         <label className="searchbar preview-searchbar" style={{ flex: 1 }}>
           <Search size={18} />
           <input
@@ -114,7 +147,7 @@ export default function Transactions({ onEdit }) {
           />
         </label>
         <button
-          className={`icon-btn filter-icon-btn ${filterOpen || hasAdvancedFilter ? 'active' : ''}`}
+          className={`icon-btn filter-icon-btn playful-icon-btn ${filterOpen || hasAdvancedFilter ? 'active' : ''}`}
           type="button"
           aria-label="Filter transaksi"
           onClick={() => setFilterOpen((value) => !value)}
@@ -123,7 +156,7 @@ export default function Transactions({ onEdit }) {
         </button>
       </div>
 
-      <div className="filter-row preview-filter-row">
+      <div className="filter-row preview-filter-row playful-filter-row">
         {[
           ['all', 'Semua'],
           ['income', 'Pemasukan'],
@@ -141,7 +174,7 @@ export default function Transactions({ onEdit }) {
       </div>
 
       {filterOpen && (
-        <section className="advanced-filter-card">
+        <section className="advanced-filter-card playful-filter-card">
           <div className="advanced-filter-head">
             <div>
               <p className="section-kicker">Filter Detail</p>
@@ -227,7 +260,7 @@ export default function Transactions({ onEdit }) {
         </section>
       )}
 
-      <section className="transactions-list-card">
+      <section className="transactions-list-card playful-list-card">
         <TransactionList
           transactions={filtered}
           categories={categories}
