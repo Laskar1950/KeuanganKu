@@ -1,23 +1,22 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, Plus, Target, Trash2 } from 'lucide-react';
+import { CalendarDays, Plus, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, EmptyState, ProgressBar, StatusPill } from '../components/UI.jsx';
 import { currentMonthYear, formatRupiah, monthLabel } from '../utils/format.js';
 import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
 
 export default function Budgets() {
-  const { budgets, categories, transactions, addBudget, deleteBudget, notify } = useApp();
+  const { budgets, accountBalances, transactions, addBudget, deleteBudget, notify } = useApp();
   const { month, year } = currentMonthYear();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ categoryId: '', amount: '' });
+  const [form, setForm] = useState({ name: '', amount: '', accountId: '', note: '' });
 
+  const activeAccounts = accountBalances.filter((account) => account.isActive);
   const monthTransactions = useMemo(() => getMonthTransactions(transactions, month, year), [transactions, month, year]);
   const monthBudgets = useMemo(
     () => budgets.filter((budget) => budget.month === month && budget.year === year),
     [budgets, month, year]
   );
-  const expenseCategories = categories.filter((cat) => cat.type === 'expense');
-  const availableCategories = expenseCategories.filter((category) => !monthBudgets.some((budget) => budget.categoryId === category.id));
   const budgetUsages = monthBudgets.map((budget) => ({ budget, usage: getBudgetUsage(budget, monthTransactions) }));
   const totalBudget = monthBudgets.reduce((total, budget) => total + Number(budget.amount || 0), 0);
   const totalUsed = budgetUsages.reduce((total, item) => total + Number(item.usage.used || 0), 0);
@@ -27,7 +26,7 @@ export default function Budgets() {
     event.preventDefault();
     try {
       await addBudget({ ...form, month, year });
-      setForm({ categoryId: '', amount: '' });
+      setForm({ name: '', amount: '', accountId: '', note: '' });
       setShowForm(false);
     } catch (error) {
       notify(error.message);
@@ -71,16 +70,24 @@ export default function Budgets() {
           </div>
           <form className="form-grid allocation-form" onSubmit={submit}>
             <div className="field">
-              <label>Kategori Pengeluaran</label>
-              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
-                <option value="">Pilih kategori</option>
-                {availableCategories.map((cat) => <option value={cat.id} key={cat.id}>{cat.name}</option>)}
-              </select>
-              {availableCategories.length === 0 && <p className="budget-hint">Semua kategori pengeluaran sudah memiliki alokasi untuk bulan ini.</p>}
+              <label>Nama Alokasi</label>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Contoh: Belanja Dapur" />
             </div>
             <div className="field">
               <label>Nominal Alokasi</label>
               <input type="number" min="1" inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="Contoh: 1000000" />
+            </div>
+            <div className="field">
+              <label>Sumber Anggaran / Dompet</label>
+              <select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+                <option value="">Pilih dompet sumber</option>
+                {activeAccounts.map((account) => <option value={account.id} key={account.id}>{account.name} • Saldo {formatRupiah(account.currentBalance)}</option>)}
+              </select>
+              <p className="budget-hint">Saat pengeluaran memakai alokasi ini, saldo dompet sumber akan otomatis berkurang.</p>
+            </div>
+            <div className="field">
+              <label>Keterangan</label>
+              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Opsional, contoh: kebutuhan dapur bulanan" />
             </div>
             <button className="primary-btn playful-primary-btn" type="submit">Simpan Alokasi</button>
           </form>
@@ -97,15 +104,16 @@ export default function Budgets() {
         </div>
 
         {monthBudgets.length === 0 ? (
-          <EmptyState emoji="🎯" title="Belum ada alokasi" description="Buat alokasi agar setiap pengeluaran bisa langsung mengambil sisa anggaran yang sesuai." />
+          <EmptyState emoji="🎯" title="Belum ada alokasi" description="Buat alokasi dengan nama, nominal, dan sumber dompet agar pengeluaran bisa langsung mengurangi budget yang sesuai." />
         ) : budgetUsages.map(({ budget, usage }) => {
-          const category = categories.find((cat) => cat.id === budget.categoryId);
+          const account = accountBalances.find((item) => item.id === budget.accountId);
           return (
             <div className="budget-row allocation-row playful-budget-row" key={budget.id}>
               <div className="budget-row-header">
                 <div>
-                  <h3>{category?.name}</h3>
-                  <p className="item-sub">Terpakai {formatRupiah(usage.used)} dari {formatRupiah(budget.amount)}</p>
+                  <h3>{budget.name}</h3>
+                  <p className="item-sub">Sumber {account?.name || 'Dompet tidak ditemukan'} • Terpakai {formatRupiah(usage.used)} dari {formatRupiah(budget.amount)}</p>
+                  {budget.note && <p className="item-sub">{budget.note}</p>}
                 </div>
                 <StatusPill status={usage.status} />
               </div>
@@ -122,26 +130,18 @@ export default function Budgets() {
         })}
       </Card>
 
-      <section className="playful-category-section">
-        <div className="section-head">
+      <Card className="playful-section-card allocation-explain-card">
+        <div className="row-between">
           <div>
-            <p className="section-kicker">Dropdown transaksi</p>
-            <h2>Kategori Pengeluaran</h2>
+            <p className="section-kicker">Alur pengeluaran</p>
+            <h2>Kategori pengeluaran diganti oleh alokasi</h2>
           </div>
-          <span className="section-link">{expenseCategories.length} kategori</span>
+          <Wallet size={18} className="muted" />
         </div>
-        <div className="playful-category-grid">
-          {expenseCategories.length === 0 ? (
-            <Card className="playful-empty-inline"><span>Belum ada kategori pengeluaran.</span></Card>
-          ) : expenseCategories.slice(0, 6).map((category) => (
-            <div className="playful-category-card" key={category.id}>
-              <span className="playful-category-icon"><Target size={16} /></span>
-              <strong>{category.name}</strong>
-              <p>Muncul di dropdown transaksi pengeluaran.</p>
-            </div>
-          ))}
-        </div>
-      </section>
+        <p className="muted tiny" style={{ lineHeight: 1.6, marginBottom: 0 }}>
+          Untuk transaksi pengeluaran, user cukup memilih alokasi anggaran. Aplikasi akan memakai sumber dompet dari alokasi tersebut dan menghitung sisa alokasi secara otomatis.
+        </p>
+      </Card>
     </div>
   );
 }
