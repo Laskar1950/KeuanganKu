@@ -33,7 +33,8 @@ export function getTotalBalance(accounts, transactions) {
 export function getExpenseByCategory(transactions, categories) {
   const expenseTransactions = transactions.filter((trx) => trx.type === 'expense');
   const grouped = expenseTransactions.reduce((acc, trx) => {
-    acc[trx.categoryId] = (acc[trx.categoryId] || 0) + Number(trx.amount || 0);
+    const key = trx.categoryId || 'uncategorized';
+    acc[key] = (acc[key] || 0) + Number(trx.amount || 0);
     return acc;
   }, {});
   return Object.entries(grouped)
@@ -45,13 +46,26 @@ export function getExpenseByCategory(transactions, categories) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+export function getExpenseByAllocation(transactions, budgets) {
+  const expenseTransactions = transactions.filter((trx) => trx.type === 'expense');
+  const grouped = expenseTransactions.reduce((acc, trx) => {
+    const key = trx.budgetId || 'no-allocation';
+    acc[key] = (acc[key] || 0) + Number(trx.amount || 0);
+    return acc;
+  }, {});
+
+  return Object.entries(grouped)
+    .map(([budgetId, amount]) => ({
+      budgetId,
+      name: budgets.find((budget) => budget.id === budgetId)?.name || 'Tanpa Alokasi',
+      amount,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 export function getBudgetUsage(budget, transactions) {
   const used = transactions
-    .filter((trx) => {
-      if (trx.type !== 'expense') return false;
-      if (trx.budgetId) return trx.budgetId === budget.id;
-      return trx.categoryId === budget.categoryId;
-    })
+    .filter((trx) => trx.type === 'expense' && trx.budgetId === budget.id)
     .reduce((total, trx) => total + Number(trx.amount || 0), 0);
 
   const percentage = budget.amount > 0 ? Math.round((used / budget.amount) * 100) : 0;
