@@ -4,6 +4,7 @@ import App from './App.jsx';
 import './styles.css';
 import './preview-glass.css';
 import './settings-polish.css';
+import './budget-allocation.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
