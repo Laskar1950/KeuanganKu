@@ -11,6 +11,7 @@ Project ini sudah memakai:
 - Supabase migration SQL
 - Local state dari data Supabase, bukan localStorage
 - Glassmorphism UI refresh dengan loading state modern
+- Kategori transaksi custom dan alokasi anggaran pengeluaran
 
 ## 1. Prasyarat
 
@@ -37,10 +38,16 @@ supabase/migrations/20260524000100_initial_schema.sql
 supabase/migrations/20260524000200_family_invites.sql
 ```
 
-5. Buka Project Settings > API.
-6. Copy `Project URL` dan `anon public key`.
-7. Copy `.env.example` menjadi `.env.local`.
-8. Isi:
+5. Untuk mengaktifkan relasi transaksi ke alokasi anggaran, jalankan juga:
+
+```txt
+supabase/migrations/20260615000100_budget_allocations.sql
+```
+
+6. Buka Project Settings > API.
+7. Copy `Project URL` dan `anon public key`.
+8. Copy `.env.example` menjadi `.env.local`.
+9. Isi:
 
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
@@ -89,7 +96,9 @@ http://localhost:5173
    - Akun/dompet awal
    - Saldo awal
 5. Masuk ke dashboard keluarga.
-6. Tambahkan transaksi, anggaran, akun/dompet, dan target tabungan.
+6. Tambahkan kategori pengeluaran custom dari Pengaturan atau langsung dari form transaksi.
+7. Buat alokasi anggaran bulanan untuk kategori pengeluaran.
+8. Saat mencatat pengeluaran, pilih alokasi agar nilai transaksi langsung mengurangi sisa anggaran tersebut.
 
 ## 6. Struktur Folder
 
@@ -108,12 +117,14 @@ family-finance-manager/
 │   ├── utils/
 │   ├── App.jsx
 │   ├── main.jsx
+│   ├── budget-allocation.css
 │   └── styles.css
 ├── supabase/
 │   ├── config.toml
 │   └── migrations/
 │       ├── 20260524000100_initial_schema.sql
-│       └── 20260524000200_family_invites.sql
+│       ├── 20260524000200_family_invites.sql
+│       └── 20260615000100_budget_allocations.sql
 ├── .env.example
 ├── package.json
 └── README.md
@@ -137,6 +148,9 @@ family-finance-manager/
 - Member keluarga dapat bergabung menggunakan kode undangan.
 - Saldo akun dihitung dari saldo awal + transaksi pada masing-masing dompet.
 - Total saldo keluarga dihitung dari seluruh saldo dompet aktif.
+- Kategori custom keluarga bisa dibuat oleh owner dan langsung muncul pada dropdown transaksi sesuai jenisnya.
+- Alokasi anggaran hanya untuk kategori pengeluaran dan satu kategori hanya boleh memiliki satu alokasi per bulan.
+- Pengeluaran dapat dikaitkan ke alokasi anggaran melalui kolom `transactions.budget_id`.
 - Data sensitif diproteksi dengan RLS berbasis membership keluarga.
 - Fitur export PDF/Excel, OCR, integrasi bank, recurring transaction, dan reminder belum masuk MVP.
 
