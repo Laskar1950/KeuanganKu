@@ -11,15 +11,17 @@ const accountTypeLabel = {
   other: 'Lainnya',
 };
 
-function getTransactionTitle(trx, category) {
+function getTransactionTitle(trx, category, budget) {
   const note = trx.note?.trim();
   if (note) return note;
+  if (trx.type === 'expense' && budget?.name) return budget.name;
   return category?.name || (trx.type === 'income' ? 'Pemasukan' : 'Pengeluaran');
 }
 
 export default function TransactionList({
   transactions,
   categories,
+  budgets = [],
   accounts,
   onEdit,
   onDelete,
@@ -40,10 +42,12 @@ export default function TransactionList({
     <div className={`transaction-list ${compact ? 'compact' : ''}`}>
       {transactions.map((trx) => {
         const category = categories.find((cat) => cat.id === trx.categoryId);
+        const budget = budgets.find((item) => item.id === trx.budgetId);
         const account = accounts.find((acc) => acc.id === trx.accountId);
         const isIncome = trx.type === 'income';
-        const title = getTransactionTitle(trx, category);
+        const title = getTransactionTitle(trx, category, budget);
         const creatorName = trx.createdByProfile?.name || 'Anggota keluarga';
+        const transactionGroup = isIncome ? category?.name || 'Pemasukan' : budget?.name || 'Tanpa Alokasi';
 
         return (
           <article className={`transaction-item ${isIncome ? 'income' : 'expense'}`} key={trx.id}>
@@ -63,7 +67,7 @@ export default function TransactionList({
               <div className="transaction-meta">
                 <span>{formatDate(trx.transactionDate)}</span>
                 <span>•</span>
-                <span>{category?.name || 'Tanpa kategori'}</span>
+                <span>{transactionGroup}</span>
                 <span>•</span>
                 <span>Oleh {creatorName}</span>
               </div>
