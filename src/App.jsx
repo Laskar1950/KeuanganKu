@@ -31,33 +31,38 @@ function AppContent() {
   if (!user) return <><Toast message={toast} /><AuthPage /></>;
   if (!household) return <><Toast message={toast} /><OnboardingPage /></>;
 
+  const openAdd = () => {
+    setEditingTransaction(null);
+    setSheetOpen(true);
+  };
+
   const openEdit = (trx) => {
     setEditingTransaction(trx);
     setSheetOpen(true);
   };
 
   const renderPage = () => {
-    if (activeTab === 'transactions') return <Transactions onEdit={openEdit} />;
+    if (activeTab === 'transactions') return <Transactions onEdit={openEdit} onAdd={openAdd} />;
     if (activeTab === 'family') return <Settings view="family" />;
     if (activeTab === 'profile') return <Settings view="profile" />;
     if (activeTab === 'budgets') return <Budgets />;
     if (activeTab === 'reports') return <Reports />;
-    if (activeTab === 'settings') return <Settings />;
-    return <Dashboard onAddTransaction={() => setSheetOpen(true)} goTo={setActiveTab} />;
+    if (activeTab === 'settings') return <Settings view="family" />;
+    return <Dashboard onAddTransaction={openAdd} goTo={setActiveTab} />;
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell playful-shell">
       <Toast message={toast} />
-      <div className="phone-frame">
-        <main className="app-scroll">
+      <div className="phone-frame playful-phone-frame">
+        <main className="app-scroll playful-scroll">
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18 }}>
               {renderPage()}
             </motion.div>
           </AnimatePresence>
         </main>
-        <button className="fab" onClick={() => { setEditingTransaction(null); setSheetOpen(true); }} aria-label="Tambah transaksi"><Plus size={28} /></button>
+        <button className="fab playful-fab" onClick={openAdd} aria-label="Tambah transaksi"><Plus size={28} /></button>
         <BottomNav activeTab={activeTab} onChange={setActiveTab} />
         <TransactionSheet open={sheetOpen} onClose={() => setSheetOpen(false)} editingTransaction={editingTransaction} onClearEdit={() => setEditingTransaction(null)} />
       </div>
