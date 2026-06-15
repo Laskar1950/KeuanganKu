@@ -9,6 +9,7 @@ export default function Transactions({ onEdit, onAdd }) {
   const {
     transactions,
     categories,
+    budgets,
     accountBalances,
     familyMembers,
     deleteTransaction,
@@ -22,6 +23,7 @@ export default function Transactions({ onEdit, onAdd }) {
     creatorId: 'all',
     accountId: 'all',
     categoryId: 'all',
+    budgetId: 'all',
     startDate: '',
     endDate: '',
   });
@@ -31,6 +33,7 @@ export default function Transactions({ onEdit, onAdd }) {
 
     return transactions.filter((trx) => {
       const category = categories.find((cat) => cat.id === trx.categoryId);
+      const budget = budgets.find((item) => item.id === trx.budgetId);
       const account = accountBalances.find((acc) => acc.id === trx.accountId);
       const creator = trx.createdByProfile?.name || '';
       const creatorEmail = trx.createdByProfile?.email || '';
@@ -39,6 +42,7 @@ export default function Transactions({ onEdit, onAdd }) {
       const matchCreator = filters.creatorId === 'all' || trx.createdBy === filters.creatorId;
       const matchAccount = filters.accountId === 'all' || trx.accountId === filters.accountId;
       const matchCategory = filters.categoryId === 'all' || trx.categoryId === filters.categoryId;
+      const matchBudget = filters.budgetId === 'all' || trx.budgetId === filters.budgetId;
       const matchStartDate = !filters.startDate || trx.transactionDate >= filters.startDate;
       const matchEndDate = !filters.endDate || trx.transactionDate <= filters.endDate;
 
@@ -46,6 +50,7 @@ export default function Transactions({ onEdit, onAdd }) {
         trx.note,
         trx.type === 'income' ? 'pemasukan' : 'pengeluaran',
         category?.name,
+        budget?.name,
         account?.name,
         account?.type,
         creator,
@@ -63,22 +68,25 @@ export default function Transactions({ onEdit, onAdd }) {
         matchCreator &&
         matchAccount &&
         matchCategory &&
+        matchBudget &&
         matchStartDate &&
         matchEndDate &&
         matchQuery
       );
     });
-  }, [transactions, categories, accountBalances, query, type, filters]);
+  }, [transactions, categories, budgets, accountBalances, query, type, filters]);
 
   const hasAdvancedFilter =
     filters.creatorId !== 'all' ||
     filters.accountId !== 'all' ||
     filters.categoryId !== 'all' ||
+    filters.budgetId !== 'all' ||
     filters.startDate ||
     filters.endDate;
 
   const filteredIncome = filtered.filter((trx) => trx.type === 'income').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
   const filteredExpense = filtered.filter((trx) => trx.type === 'expense').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
+  const incomeCategories = categories.filter((category) => category.type === 'income');
 
   const resetFilters = () => {
     setQuery('');
@@ -87,6 +95,7 @@ export default function Transactions({ onEdit, onAdd }) {
       creatorId: 'all',
       accountId: 'all',
       categoryId: 'all',
+      budgetId: 'all',
       startDate: '',
       endDate: '',
     });
@@ -120,7 +129,7 @@ export default function Transactions({ onEdit, onAdd }) {
           </div>
           <span className="role-pill owner">Alokasi otomatis</span>
         </div>
-        <p className="muted tiny quick-copy">Pilih kategori pengeluaran dan alokasi anggaran dari bottom sheet agar sisa budget langsung terhitung.</p>
+        <p className="muted tiny quick-copy">Untuk pengeluaran, pilih alokasi anggaran. Dompet akan otomatis mengikuti sumber anggaran pada alokasi tersebut.</p>
         <button className="primary-btn playful-primary-btn" type="button" onClick={onAdd}>
           <Plus size={16} /> Tambah Transaksi
         </button>
@@ -141,7 +150,7 @@ export default function Transactions({ onEdit, onAdd }) {
         <label className="searchbar preview-searchbar" style={{ flex: 1 }}>
           <Search size={18} />
           <input
-            placeholder="Cari transaksi, catatan, dompet, anggota..."
+            placeholder="Cari transaksi, alokasi, catatan, dompet, anggota..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -218,19 +227,36 @@ export default function Transactions({ onEdit, onAdd }) {
               </div>
             </div>
 
-            <div className="field">
-              <label>Transaksi / Kategori</label>
-              <select
-                value={filters.categoryId}
-                onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-              >
-                <option value="all">Semua kategori</option>
-                {categories.map((category) => (
-                  <option value={category.id} key={category.id}>
-                    {category.name} · {category.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}
-                  </option>
-                ))}
-              </select>
+            <div className="grid-2">
+              <div className="field">
+                <label>Alokasi Pengeluaran</label>
+                <select
+                  value={filters.budgetId}
+                  onChange={(e) => setFilters({ ...filters, budgetId: e.target.value })}
+                >
+                  <option value="all">Semua alokasi</option>
+                  {budgets.map((budget) => (
+                    <option value={budget.id} key={budget.id}>
+                      {budget.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Kategori Pemasukan</label>
+                <select
+                  value={filters.categoryId}
+                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+                >
+                  <option value="all">Semua kategori</option>
+                  {incomeCategories.map((category) => (
+                    <option value={category.id} key={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid-2">
@@ -264,6 +290,7 @@ export default function Transactions({ onEdit, onAdd }) {
         <TransactionList
           transactions={filtered}
           categories={categories}
+          budgets={budgets}
           accounts={accountBalances}
           onEdit={onEdit}
           onDelete={handleDelete}
