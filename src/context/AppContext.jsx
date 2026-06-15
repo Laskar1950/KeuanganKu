@@ -295,16 +295,13 @@ export function AppProvider({ children }) {
     notify('Kode undangan keluarga berhasil disalin.');
   };
 
-  const validateBudgetAllocation = (payload, ignoreTransactionId = null) => {
+  const getAllocationForTransaction = (payload, ignoreTransactionId = null) => {
     if (payload.type !== 'expense') return null;
-    if (!payload.budgetId) return null;
+    if (!payload.budgetId) throw new Error('Pengeluaran wajib memilih alokasi anggaran.');
 
     const budget = state.budgets.find((item) => item.id === payload.budgetId);
     if (!budget) throw new Error('Alokasi anggaran tidak ditemukan. Pilih ulang alokasi.');
-
-    if (budget.categoryId !== payload.categoryId) {
-      throw new Error('Alokasi anggaran tidak sesuai dengan kategori pengeluaran yang dipilih.');
-    }
+    if (!budget.accountId) throw new Error('Alokasi belum memiliki sumber dompet. Edit atau buat ulang alokasi.');
 
     const trxCycle = getTransactionCycle(payload.transactionDate);
     if (budget.month !== trxCycle.month || budget.year !== trxCycle.year) {
@@ -326,15 +323,21 @@ export function AppProvider({ children }) {
 
   const addTransaction = async (payload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
-    if (!payload.transactionDate || !payload.categoryId || !payload.accountId) throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
+    if (!payload.transactionDate) throw new Error('Tanggal transaksi wajib dipilih.');
 
-    const budget = validateBudgetAllocation(payload);
+    const budget = getAllocationForTransaction(payload);
+    const isExpense = payload.type === 'expense';
+    const accountId = isExpense ? budget.accountId : payload.accountId;
+    const categoryId = isExpense ? null : payload.categoryId;
+
+    if (!accountId) throw new Error('Akun/dompet wajib dipilih.');
+    if (!isExpense && !categoryId) throw new Error('Kategori pemasukan wajib dipilih.');
 
     const { error } = await supabase.from('transactions').insert({
       family_id: state.household.id,
-      account_id: payload.accountId,
-      category_id: payload.categoryId,
-      budget_id: payload.type === 'expense' ? budget?.id || null : null,
+      account_id: accountId,
+      category_id: categoryId,
+      budget_id: isExpense ? budget.id : null,
       created_by: state.user.id,
       type: payload.type,
       amount: Number(payload.amount),
@@ -343,22 +346,28 @@ export function AppProvider({ children }) {
     });
     if (error) throw error;
 
-    notify(budget ? 'Transaksi berhasil disimpan dan mengambil alokasi anggaran.' : 'Transaksi berhasil disimpan.');
+    notify(isExpense ? 'Pengeluaran berhasil disimpan, alokasi dan saldo dompet otomatis berkurang.' : 'Transaksi berhasil disimpan.');
     await refreshData();
   };
 
   const updateTransaction = async (id, payload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
-    if (!payload.transactionDate || !payload.categoryId || !payload.accountId) throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
+    if (!payload.transactionDate) throw new Error('Tanggal transaksi wajib dipilih.');
 
-    const budget = validateBudgetAllocation(payload, id);
+    const budget = getAllocationForTransaction(payload, id);
+    const isExpense = payload.type === 'expense';
+    const accountId = isExpense ? budget.accountId : payload.accountId;
+    const categoryId = isExpense ? null : payload.categoryId;
+
+    if (!accountId) throw new Error('Akun/dompet wajib dipilih.');
+    if (!isExpense && !categoryId) throw new Error('Kategori pemasukan wajib dipilih.');
 
     const { error } = await supabase
       .from('transactions')
       .update({
-        account_id: payload.accountId,
-        category_id: payload.categoryId,
-        budget_id: payload.type === 'expense' ? budget?.id || null : null,
+        account_id: accountId,
+        category_id: categoryId,
+        budget_id: isExpense ? budget.id : null,
         type: payload.type,
         amount: Number(payload.amount),
         transaction_date: payload.transactionDate,
@@ -367,7 +376,7 @@ export function AppProvider({ children }) {
       .eq('id', id);
     if (error) throw error;
 
-    notify(budget ? 'Transaksi berhasil diperbarui dan alokasi anggaran ikut disesuaikan.' : 'Transaksi berhasil diperbarui.');
+    notify(isExpense ? 'Pengeluaran berhasil diperbarui, alokasi dan saldo dompet ikut disesuaikan.' : 'Transaksi berhasil diperbarui.');
     await refreshData();
   };
 
@@ -471,24 +480,29 @@ export function AppProvider({ children }) {
   };
 
   const addBudget = async (payload) => {
-    if (!payload.categoryId || !payload.amount) throw new Error('Kategori dan nominal anggaran wajib diisi.');
+    if (!payload.name?.trim()) throw new Error('Nama alokasi wajib diisi.');
+    if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal alokasi wajib lebih besar dari 0.');
+    if (!payload.accountId) throw new Error('Sumber anggaran/dompet wajib dipilih.');
 
-    const category = state.categories.find((item) => item.id === payload.categoryId);
-    if (!category || category.type !== 'expense') throw new Error('Alokasi anggaran hanya bisa dibuat untuk kategori pengeluaran.');
+    const account = state.accounts.find((item) => item.id === payload.accountId && item.isActive);
+    if (!account) throw new Error('Sumber anggaran/dompet tidak aktif atau tidak ditemukan.');
 
     const duplicate = state.budgets.find((budget) =>
-      budget.categoryId === payload.categoryId &&
+      budget.name?.trim().toLowerCase() === payload.name.trim().toLowerCase() &&
       budget.month === Number(payload.month) &&
       budget.year === Number(payload.year)
     );
-    if (duplicate) throw new Error('Kategori ini sudah memiliki alokasi anggaran untuk bulan tersebut.');
+    if (duplicate) throw new Error('Nama alokasi ini sudah digunakan untuk bulan tersebut.');
 
     const { error } = await supabase.from('budgets').insert({
       family_id: state.household.id,
-      category_id: payload.categoryId,
+      name: payload.name.trim(),
+      account_id: payload.accountId,
+      category_id: null,
       month: Number(payload.month),
       year: Number(payload.year),
       amount: Number(payload.amount),
+      note: payload.note || null,
     });
     if (error) throw error;
 
