@@ -45,9 +45,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
       setForm({
         type: editingTransaction.type,
         amount: editingTransaction.amount,
-        categoryId: editingTransaction.categoryId,
+        categoryId: editingTransaction.categoryId || '',
         budgetId: editingTransaction.budgetId || '',
-        accountId: editingTransaction.accountId,
+        accountId: editingTransaction.accountId || '',
         transactionDate: editingTransaction.transactionDate,
         note: editingTransaction.note,
       });
@@ -59,9 +59,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   }, [editingTransaction, open]);
 
   const isOwner = currentMember?.role === 'owner';
-  const filteredCategories = useMemo(
-    () => categories.filter((category) => category.type === form.type),
-    [categories, form.type]
+  const incomeCategories = useMemo(
+    () => categories.filter((category) => category.type === 'income'),
+    [categories]
   );
 
   const cycle = useMemo(() => getCycle(form.transactionDate), [form.transactionDate]);
@@ -72,12 +72,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
   const availableBudgets = useMemo(() => {
     if (form.type !== 'expense') return [];
-    return budgets.filter((budget) => {
-      const samePeriod = budget.month === cycle.month && budget.year === cycle.year;
-      const sameCategory = !form.categoryId || budget.categoryId === form.categoryId;
-      return samePeriod && sameCategory;
-    });
-  }, [budgets, cycle.month, cycle.year, form.categoryId, form.type]);
+    return budgets.filter((budget) => budget.month === cycle.month && budget.year === cycle.year);
+  }, [budgets, cycle.month, cycle.year, form.type]);
 
   React.useEffect(() => {
     if (form.type !== 'expense') {
@@ -93,18 +89,19 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
   const selectedBudget = availableBudgets.find((budget) => budget.id === form.budgetId) || null;
   const selectedBudgetUsage = selectedBudget ? getBudgetUsage(selectedBudget, monthTransactions) : null;
+  const selectedBudgetAccount = selectedBudget ? accountBalances.find((account) => account.id === selectedBudget.accountId) : null;
   const projectedRemaining = selectedBudgetUsage ? selectedBudgetUsage.remaining - Number(form.amount || 0) : null;
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-  const setType = (type) => setForm((prev) => ({ ...prev, type, categoryId: '', budgetId: '' }));
+  const setType = (type) => setForm((prev) => ({ ...prev, type, categoryId: '', budgetId: '', accountId: '' }));
 
   const submitQuickCategory = async (event) => {
     event.preventDefault();
     try {
       if (!quickCategoryName.trim()) throw new Error('Nama kategori wajib diisi.');
       setSavingCategory(true);
-      const category = await addCategory({ name: quickCategoryName, type: form.type });
-      setForm((prev) => ({ ...prev, categoryId: category?.id || prev.categoryId, budgetId: '' }));
+      const category = await addCategory({ name: quickCategoryName, type: 'income' });
+      setForm((prev) => ({ ...prev, categoryId: category?.id || prev.categoryId }));
       setQuickCategoryName('');
       setShowCategoryForm(false);
     } catch (error) {
@@ -117,12 +114,13 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const submit = async (event) => {
     event.preventDefault();
     try {
+      const isExpense = form.type === 'expense';
       const payload = {
         ...form,
         amount: Number(form.amount),
-        categoryId: form.categoryId || filteredCategories[0]?.id,
-        accountId: form.accountId || accountBalances.find((account) => account.isActive)?.id,
-        budgetId: form.type === 'expense' ? form.budgetId || null : null,
+        categoryId: isExpense ? null : form.categoryId || incomeCategories[0]?.id,
+        accountId: isExpense ? selectedBudget?.accountId || '' : form.accountId || accountBalances.find((account) => account.isActive)?.id,
+        budgetId: isExpense ? form.budgetId || null : null,
       };
       if (editingTransaction) await updateTransaction(editingTransaction.id, payload);
       else await addTransaction(payload);
@@ -159,31 +157,52 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
               <input inputMode="numeric" type="number" min="1" placeholder="Contoh: 150000" value={form.amount} onChange={(e) => setField('amount', e.target.value)} />
             </div>
 
-            <div className="grid-2">
-              <div className="field">
-                <label>Kategori</label>
-                <select value={form.categoryId} onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value, budgetId: '' }))}>
-                  <option value="">Pilih</option>
-                  {filteredCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            {form.type === 'expense' ? (
+              <div className="field allocation-field">
+                <label>Alokasi Anggaran</label>
+                <select value={form.budgetId} onChange={(e) => setField('budgetId', e.target.value)}>
+                  <option value="">Pilih alokasi</option>
+                  {availableBudgets.map((budget) => {
+                    const usage = getBudgetUsage(budget, monthTransactions);
+                    const account = accountBalances.find((item) => item.id === budget.accountId);
+                    return <option value={budget.id} key={budget.id}>{budget.name} • {account?.name || 'Dompet'} • Sisa {formatRupiah(usage.remaining)}</option>;
+                  })}
                 </select>
-                {isOwner && (
-                  <button className="inline-add-btn" type="button" onClick={() => setShowCategoryForm((value) => !value)}>
-                    <PlusCircle size={14} /> Tambah kategori {form.type === 'expense' ? 'pengeluaran' : 'pemasukan'}
-                  </button>
+                {selectedBudgetUsage ? (
+                  <p className={`budget-hint ${projectedRemaining < 0 ? 'danger' : ''}`}>
+                    Sumber: {selectedBudgetAccount?.name || 'Dompet tidak ditemukan'} · Sisa setelah transaksi: {formatRupiah(projectedRemaining)} dari alokasi {formatRupiah(selectedBudget.amount)}.
+                  </p>
+                ) : (
+                  <p className="budget-hint">Pengeluaran wajib memilih alokasi. Dompet akan otomatis mengikuti sumber anggaran pada alokasi.</p>
                 )}
               </div>
-              <div className="field">
-                <label>Dompet</label>
-                <select value={form.accountId} onChange={(e) => setField('accountId', e.target.value)}>
-                  <option value="">Pilih</option>
-                  {accountBalances.filter((acc) => acc.isActive).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                </select>
+            ) : (
+              <div className="grid-2">
+                <div className="field">
+                  <label>Kategori Pemasukan</label>
+                  <select value={form.categoryId} onChange={(e) => setField('categoryId', e.target.value)}>
+                    <option value="">Pilih</option>
+                    {incomeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                  {isOwner && (
+                    <button className="inline-add-btn" type="button" onClick={() => setShowCategoryForm((value) => !value)}>
+                      <PlusCircle size={14} /> Tambah kategori pemasukan
+                    </button>
+                  )}
+                </div>
+                <div className="field">
+                  <label>Dompet Tujuan</label>
+                  <select value={form.accountId} onChange={(e) => setField('accountId', e.target.value)}>
+                    <option value="">Pilih</option>
+                    {accountBalances.filter((acc) => acc.isActive).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
-            {showCategoryForm && (
+            {showCategoryForm && form.type === 'income' && (
               <div className="inline-category-form">
-                <input value={quickCategoryName} onChange={(event) => setQuickCategoryName(event.target.value)} placeholder="Contoh: Belanja Anak" />
+                <input value={quickCategoryName} onChange={(event) => setQuickCategoryName(event.target.value)} placeholder="Contoh: Bonus Project" />
                 <button className="small-btn" type="button" disabled={savingCategory} onClick={submitQuickCategory}>{savingCategory ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             )}
@@ -192,27 +211,6 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
               <label>Tanggal</label>
               <input type="date" value={form.transactionDate} onChange={(e) => setForm((prev) => ({ ...prev, transactionDate: e.target.value, budgetId: '' }))} />
             </div>
-
-            {form.type === 'expense' && (
-              <div className="field allocation-field">
-                <label>Alokasi Anggaran</label>
-                <select value={form.budgetId} onChange={(e) => setField('budgetId', e.target.value)}>
-                  <option value="">Tanpa alokasi</option>
-                  {availableBudgets.map((budget) => {
-                    const category = categories.find((cat) => cat.id === budget.categoryId);
-                    const usage = getBudgetUsage(budget, monthTransactions);
-                    return <option value={budget.id} key={budget.id}>{category?.name || 'Kategori'} • Sisa {formatRupiah(usage.remaining)}</option>;
-                  })}
-                </select>
-                {selectedBudgetUsage ? (
-                  <p className={`budget-hint ${projectedRemaining < 0 ? 'danger' : ''}`}>
-                    Sisa setelah transaksi: {formatRupiah(projectedRemaining)} dari alokasi {formatRupiah(selectedBudget.amount)}.
-                  </p>
-                ) : (
-                  <p className="budget-hint">Pilih alokasi agar pengeluaran ini langsung mengurangi sisa anggaran bulan berjalan.</p>
-                )}
-              </div>
-            )}
 
             <div className="field">
               <label>Catatan</label>
