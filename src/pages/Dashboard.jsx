@@ -242,14 +242,14 @@ export default function Dashboard({ goTo }) {
               <span>Belum ada alokasi bulan ini.</span>
             </div>
           ) : budgetUsages.slice(0, 3).map(({ budget, usage }) => {
-            const category = categories.find((cat) => cat.id === budget.categoryId);
+            const account = accountBalances.find((item) => item.id === budget.accountId);
             const variant = usage.status === 'Aman' ? 'green' : usage.status === 'Mendekati' ? 'amber' : 'red';
             return (
               <div className="budget-row playful-budget-row" key={budget.id}>
                 <div className="budget-row-header">
                   <div>
-                    <h3>{category?.name || 'Kategori'}</h3>
-                    <p className="item-sub">Sisa {formatRupiah(usage.remaining)}</p>
+                    <h3>{budget.name}</h3>
+                    <p className="item-sub">{account?.name || 'Dompet'} • Sisa {formatRupiah(usage.remaining)}</p>
                   </div>
                   <StatusPill status={usage.status} />
                 </div>
@@ -279,7 +279,7 @@ export default function Dashboard({ goTo }) {
           title="Aktivitas Terakhir"
           action={<button className="section-link" type="button" onClick={() => goTo('transactions')}>Lihat semua</button>}
         />
-        <TransactionList transactions={transactions.slice(0, 3)} categories={categories} accounts={accountBalances} compact />
+        <TransactionList transactions={transactions.slice(0, 3)} categories={categories} budgets={budgets} accounts={accountBalances} compact />
       </Card>
     </div>
   );
