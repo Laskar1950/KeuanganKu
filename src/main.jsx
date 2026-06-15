@@ -6,6 +6,7 @@ import './preview-glass.css';
 import './settings-polish.css';
 import './budget-allocation.css';
 import './playful-professional.css';
+import './navigation-fix.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
