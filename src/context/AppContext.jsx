@@ -10,7 +10,7 @@ import {
   toSavingGoal,
   toTransaction,
 } from '../lib/mappers.js';
-import { calculateAccountBalance } from '../utils/calculations.js';
+import { calculateAccountBalance, getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
 
 const AppContext = createContext(null);
 
@@ -36,6 +36,11 @@ function assertOwner(member) {
   if (member?.role !== 'owner') {
     throw new Error('Aksi ini hanya bisa dilakukan oleh owner keluarga.');
   }
+}
+
+function getTransactionCycle(dateString) {
+  const [year, month] = String(dateString || '').split('-').map(Number);
+  return { month, year };
 }
 
 export function AppProvider({ children }) {
@@ -290,14 +295,46 @@ export function AppProvider({ children }) {
     notify('Kode undangan keluarga berhasil disalin.');
   };
 
+  const validateBudgetAllocation = (payload, ignoreTransactionId = null) => {
+    if (payload.type !== 'expense') return null;
+    if (!payload.budgetId) return null;
+
+    const budget = state.budgets.find((item) => item.id === payload.budgetId);
+    if (!budget) throw new Error('Alokasi anggaran tidak ditemukan. Pilih ulang alokasi.');
+
+    if (budget.categoryId !== payload.categoryId) {
+      throw new Error('Alokasi anggaran tidak sesuai dengan kategori pengeluaran yang dipilih.');
+    }
+
+    const trxCycle = getTransactionCycle(payload.transactionDate);
+    if (budget.month !== trxCycle.month || budget.year !== trxCycle.year) {
+      throw new Error('Alokasi anggaran tidak sesuai dengan bulan transaksi. Pilih alokasi atau tanggal yang sesuai.');
+    }
+
+    const monthTransactions = getMonthTransactions(state.transactions, budget.month, budget.year)
+      .filter((trx) => trx.id !== ignoreTransactionId);
+    const usage = getBudgetUsage(budget, monthTransactions);
+    const remaining = Number(usage.remaining || 0);
+    const amount = Number(payload.amount || 0);
+
+    if (amount > remaining) {
+      throw new Error(`Nominal melebihi sisa alokasi. Sisa alokasi saat ini Rp${remaining.toLocaleString('id-ID')}.`);
+    }
+
+    return budget;
+  };
+
   const addTransaction = async (payload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
     if (!payload.transactionDate || !payload.categoryId || !payload.accountId) throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
+
+    const budget = validateBudgetAllocation(payload);
 
     const { error } = await supabase.from('transactions').insert({
       family_id: state.household.id,
       account_id: payload.accountId,
       category_id: payload.categoryId,
+      budget_id: payload.type === 'expense' ? budget?.id || null : null,
       created_by: state.user.id,
       type: payload.type,
       amount: Number(payload.amount),
@@ -306,18 +343,22 @@ export function AppProvider({ children }) {
     });
     if (error) throw error;
 
-    notify('Transaksi berhasil disimpan.');
+    notify(budget ? 'Transaksi berhasil disimpan dan mengambil alokasi anggaran.' : 'Transaksi berhasil disimpan.');
     await refreshData();
   };
 
   const updateTransaction = async (id, payload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
+    if (!payload.transactionDate || !payload.categoryId || !payload.accountId) throw new Error('Tanggal, kategori, dan akun/dompet wajib dipilih.');
+
+    const budget = validateBudgetAllocation(payload, id);
 
     const { error } = await supabase
       .from('transactions')
       .update({
         account_id: payload.accountId,
         category_id: payload.categoryId,
+        budget_id: payload.type === 'expense' ? budget?.id || null : null,
         type: payload.type,
         amount: Number(payload.amount),
         transaction_date: payload.transactionDate,
@@ -326,7 +367,7 @@ export function AppProvider({ children }) {
       .eq('id', id);
     if (error) throw error;
 
-    notify('Transaksi berhasil diperbarui.');
+    notify(budget ? 'Transaksi berhasil diperbarui dan alokasi anggaran ikut disesuaikan.' : 'Transaksi berhasil diperbarui.');
     await refreshData();
   };
 
@@ -393,16 +434,22 @@ export function AppProvider({ children }) {
     assertOwner(currentMember);
     if (!payload.name?.trim()) throw new Error('Nama kategori wajib diisi.');
 
-    const { error } = await supabase.from('categories').insert({
-      family_id: state.household.id,
-      name: payload.name.trim(),
-      type: payload.type || 'expense',
-      is_default: false,
-    });
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({
+        family_id: state.household.id,
+        name: payload.name.trim(),
+        type: payload.type || 'expense',
+        is_default: false,
+      })
+      .select('*')
+      .single();
     if (error) throw error;
 
+    const category = toCategory(data);
     notify('Kategori berhasil ditambahkan.');
     await refreshData();
+    return category;
   };
 
   const deleteCategory = async (id) => {
@@ -426,6 +473,16 @@ export function AppProvider({ children }) {
   const addBudget = async (payload) => {
     if (!payload.categoryId || !payload.amount) throw new Error('Kategori dan nominal anggaran wajib diisi.');
 
+    const category = state.categories.find((item) => item.id === payload.categoryId);
+    if (!category || category.type !== 'expense') throw new Error('Alokasi anggaran hanya bisa dibuat untuk kategori pengeluaran.');
+
+    const duplicate = state.budgets.find((budget) =>
+      budget.categoryId === payload.categoryId &&
+      budget.month === Number(payload.month) &&
+      budget.year === Number(payload.year)
+    );
+    if (duplicate) throw new Error('Kategori ini sudah memiliki alokasi anggaran untuk bulan tersebut.');
+
     const { error } = await supabase.from('budgets').insert({
       family_id: state.household.id,
       category_id: payload.categoryId,
@@ -435,7 +492,7 @@ export function AppProvider({ children }) {
     });
     if (error) throw error;
 
-    notify('Anggaran berhasil dibuat.');
+    notify('Alokasi anggaran berhasil dibuat.');
     await refreshData();
   };
 
@@ -443,7 +500,7 @@ export function AppProvider({ children }) {
     const { error } = await supabase.from('budgets').delete().eq('id', id);
     if (error) throw error;
 
-    notify('Anggaran berhasil dihapus.');
+    notify('Alokasi anggaran berhasil dihapus.');
     await refreshData();
   };
 
