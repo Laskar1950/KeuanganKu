@@ -55,6 +55,7 @@ export const toTransaction = (row) => ({
   familyId: row.family_id,
   accountId: row.account_id,
   categoryId: row.category_id,
+  budgetId: row.budget_id || null,
   createdBy: row.created_by,
   createdByProfile: row.profiles ? toProfile(row.profiles) : null,
   type: row.type,
