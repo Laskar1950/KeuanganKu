@@ -54,7 +54,7 @@ export const toTransaction = (row) => ({
   id: row.id,
   familyId: row.family_id,
   accountId: row.account_id,
-  categoryId: row.category_id,
+  categoryId: row.category_id || null,
   budgetId: row.budget_id || null,
   createdBy: row.created_by,
   createdByProfile: row.profiles ? toProfile(row.profiles) : null,
@@ -69,10 +69,13 @@ export const toTransaction = (row) => ({
 export const toBudget = (row) => ({
   id: row.id,
   familyId: row.family_id,
-  categoryId: row.category_id,
+  name: row.name || 'Alokasi Anggaran',
+  accountId: row.account_id || null,
+  categoryId: row.category_id || null,
   month: Number(row.month),
   year: Number(row.year),
   amount: Number(row.amount || 0),
+  note: row.note || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
