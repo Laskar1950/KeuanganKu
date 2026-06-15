@@ -1,7 +1,12 @@
+function getDateParts(dateString) {
+  const [year, month] = String(dateString || '').split('-').map(Number);
+  return { month, year };
+}
+
 export function getMonthTransactions(transactions, month, year) {
   return transactions.filter((trx) => {
-    const date = new Date(trx.transactionDate);
-    return date.getMonth() + 1 === Number(month) && date.getFullYear() === Number(year);
+    const trxDate = getDateParts(trx.transactionDate);
+    return trxDate.month === Number(month) && trxDate.year === Number(year);
   });
 }
 
@@ -42,13 +47,19 @@ export function getExpenseByCategory(transactions, categories) {
 
 export function getBudgetUsage(budget, transactions) {
   const used = transactions
-    .filter((trx) => trx.type === 'expense' && trx.categoryId === budget.categoryId)
+    .filter((trx) => {
+      if (trx.type !== 'expense') return false;
+      if (trx.budgetId) return trx.budgetId === budget.id;
+      return trx.categoryId === budget.categoryId;
+    })
     .reduce((total, trx) => total + Number(trx.amount || 0), 0);
+
   const percentage = budget.amount > 0 ? Math.round((used / budget.amount) * 100) : 0;
   let status = 'Aman';
   if (percentage >= 100) status = 'Melebihi';
   else if (percentage >= 80) status = 'Mendekati';
-  return { used, remaining: budget.amount - used, percentage, status };
+
+  return { used, remaining: Number(budget.amount || 0) - used, percentage, status };
 }
 
 export function makeId(prefix = 'id') {
