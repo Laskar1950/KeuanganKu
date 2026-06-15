@@ -1,0 +1,118 @@
+.inline-add-btn {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: rgba(37, 99, 235, 0.92);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inline-add-btn:hover {
+  color: rgba(29, 78, 216, 1);
+}
+
+.inline-category-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.inline-category-form input {
+  min-width: 0;
+}
+
+.allocation-field {
+  padding: 12px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(20, 184, 166, 0.08));
+  border: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+.budget-hint {
+  margin: 7px 0 0;
+  color: rgba(71, 85, 105, 0.88);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.budget-hint.danger {
+  color: rgba(220, 38, 38, 0.92);
+  font-weight: 700;
+}
+
+.budget-allocation-card {
+  display: grid;
+  gap: 16px;
+}
+
+.allocation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.allocation-stat {
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.allocation-stat span {
+  display: block;
+  color: rgba(100, 116, 139, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.allocation-stat strong {
+  display: block;
+  color: rgba(15, 23, 42, 0.96);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.allocation-form {
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.allocation-row {
+  margin-top: 0;
+}
+
+.budget-row-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.budget-remaining {
+  font-weight: 700;
+}
+
+@media (max-width: 430px) {
+  .allocation-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-category-form {
+    grid-template-columns: 1fr;
+  }
+}
