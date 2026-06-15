@@ -1,21 +1,59 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, ChevronRight, Copy, Eye, EyeOff, TrendingDown, TrendingUp, UserPlus, UsersRound, Wallet } from 'lucide-react';
+import {
+  Banknote,
+  Bell,
+  ChevronRight,
+  Copy,
+  CreditCard,
+  Eye,
+  EyeOff,
+  Landmark,
+  PiggyBank,
+  ReceiptText,
+  Smartphone,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  UserPlus,
+  UsersRound,
+  Wallet,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { Card, SectionHead } from '../components/UI.jsx';
+import { Card, ProgressBar, SectionHead, StatusPill } from '../components/UI.jsx';
 import TransactionList from '../components/TransactionList.jsx';
 import { currentMonthYear, formatDate, formatRupiah } from '../utils/format.js';
-import { getMonthTransactions, getTotalBalance, sumByType } from '../utils/calculations.js';
+import { getBudgetUsage, getMonthTransactions, getTotalBalance, sumByType } from '../utils/calculations.js';
 
 const accountTypeLabel = {
-  cash: 'Akun Tunai Keluarga',
-  bank: 'Akun Bank Keluarga',
-  ewallet: 'Akun E-Wallet',
-  saving: 'Akun Tabungan',
-  other: 'Akun Lainnya',
+  cash: 'Cash keluarga',
+  bank: 'Bank keluarga',
+  ewallet: 'E-Wallet',
+  saving: 'Tabungan',
+  other: 'Dompet lainnya',
+};
+
+const walletAccent = {
+  cash: 'amber',
+  bank: 'blue',
+  ewallet: 'green',
+  saving: 'rose',
+  other: 'violet',
 };
 
 function maskMoney() {
   return 'Rp •••••••';
+}
+
+function AccountIcon({ type }) {
+  const icons = {
+    cash: Banknote,
+    bank: Landmark,
+    ewallet: Smartphone,
+    saving: PiggyBank,
+    other: Wallet,
+  };
+  const Icon = icons[type] || Wallet;
+  return <Icon size={18} />;
 }
 
 function buildNotifications({ transactions, familyMembers }) {
@@ -43,7 +81,7 @@ function buildNotifications({ transactions, familyMembers }) {
 }
 
 export default function Dashboard({ goTo }) {
-  const { household, familyMembers, transactions, categories, accountBalances, copyInviteCode } = useApp();
+  const { household, familyMembers, transactions, categories, accountBalances, budgets, copyInviteCode } = useApp();
   const { month, year } = currentMonthYear();
   const [showBalance, setShowBalance] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -56,22 +94,40 @@ export default function Dashboard({ goTo }) {
   const notifications = useMemo(() => buildNotifications({ transactions, familyMembers }), [transactions, familyMembers]);
   const unreadCount = notifications.length;
 
+  const monthBudgets = useMemo(
+    () => budgets.filter((budget) => budget.month === month && budget.year === year),
+    [budgets, month, year]
+  );
+
+  const budgetUsages = useMemo(
+    () => monthBudgets.map((budget) => ({ budget, usage: getBudgetUsage(budget, monthTransactions) })),
+    [monthBudgets, monthTransactions]
+  );
+
+  const totalBudget = monthBudgets.reduce((total, budget) => total + Number(budget.amount || 0), 0);
+  const totalUsed = budgetUsages.reduce((total, item) => total + Number(item.usage.used || 0), 0);
+  const totalRemaining = totalBudget - totalUsed;
+
   const openNotification = (notification) => {
     setNotificationOpen(false);
     goTo(notification.target);
   };
 
   return (
-    <div className="page dashboard-preview-page">
-      <header className="header preview-header">
-        <button className="family-title-btn" type="button" onClick={() => goTo('family')}>
-          <span>{household?.name || 'Keuangan Keluarga'}</span>
+    <div className="page playful-dashboard-page">
+      <header className="header playful-topbar">
+        <button className="playful-brand" type="button" onClick={() => goTo('family')}>
+          <span className="brand-mark">K</span>
+          <span className="brand-copy">
+            <small>KeuanganKu</small>
+            <strong>{household?.name || 'Dashboard'}</strong>
+          </span>
           <ChevronRight size={15} />
         </button>
 
         <div className="notification-wrap">
           <button
-            className="icon-btn notification-btn"
+            className="icon-btn notification-btn playful-icon-btn"
             aria-label="Notifikasi"
             type="button"
             onClick={() => setNotificationOpen((value) => !value)}
@@ -81,7 +137,7 @@ export default function Dashboard({ goTo }) {
           </button>
 
           {notificationOpen && (
-            <div className="notification-popover">
+            <div className="notification-popover playful-notification-popover">
               <div className="notification-head">
                 <strong>Notifikasi</strong>
                 <span>{unreadCount} baru</span>
@@ -99,7 +155,7 @@ export default function Dashboard({ goTo }) {
                       onClick={() => openNotification(notification)}
                     >
                       <span className={`notification-icon ${notification.type}`}>
-                        {notification.type === 'member' ? <UserPlus size={16} /> : <Wallet size={16} />}
+                        {notification.type === 'member' ? <UserPlus size={16} /> : <ReceiptText size={16} />}
                       </span>
                       <span>
                         <strong>{notification.title}</strong>
@@ -114,45 +170,102 @@ export default function Dashboard({ goTo }) {
         </div>
       </header>
 
-      <section className="hero-card preview-balance-card">
-        <div className="row-between">
+      <section className="playful-balance-card">
+        <div className="playful-balance-top">
           <div>
-            <p className="label">Total Saldo Keluarga</p>
-            <p className={`balance ${!showBalance ? 'masked-balance' : ''}`}>
-              {showBalance ? formatRupiah(totalBalance) : maskMoney()}
-            </p>
-            <p className="hero-caption">Diperbarui hari ini</p>
+            <p>Total saldo keluarga</p>
+            <strong>Semua dompet aktif</strong>
           </div>
           <button
-            className="soft-round-btn"
+            className="balance-toggle-btn"
             type="button"
             aria-label={showBalance ? 'Sembunyikan saldo' : 'Tampilkan saldo'}
             onClick={() => setShowBalance((value) => !value)}
           >
-            {showBalance ? <EyeOff size={18} /> : <Eye size={18} />}
+            {showBalance ? <EyeOff size={17} /> : <Eye size={17} />}
+            <span>{showBalance ? 'Sembunyikan' : 'Tampilkan'}</span>
           </button>
         </div>
-      </section>
-
-      <section className="hero-grid">
-        <div className="glass metric-glass income-glass">
-          <div className="metric-icon income"><TrendingUp size={17} /></div>
-          <p>Pemasukan</p>
-          <strong>{formatRupiah(income)}</strong>
-          <span>+12% dari bulan lalu</span>
-        </div>
-
-        <div className="glass metric-glass expense-glass">
-          <div className="metric-icon expense"><TrendingDown size={17} /></div>
-          <p>Pengeluaran</p>
-          <strong>{formatRupiah(expense)}</strong>
-          <span>-8% dari bulan lalu</span>
+        <p className={`playful-balance-amount ${!showBalance ? 'masked-balance' : ''}`}>
+          {showBalance ? formatRupiah(totalBalance) : maskMoney()}
+        </p>
+        <div className="playful-balance-metrics">
+          <div>
+            <span>Pemasukan bulan ini</span>
+            <strong>{formatRupiah(income)}</strong>
+          </div>
+          <div>
+            <span>Pengeluaran bulan ini</span>
+            <strong>{formatRupiah(expense)}</strong>
+          </div>
         </div>
       </section>
 
-      <section className="grid-2 family-code-grid">
+      <section className="playful-wallet-section">
+        <SectionHead
+          title="Saldo Dompet"
+          action={<span className="section-link">Geser untuk melihat</span>}
+        />
+        <div className="playful-wallet-carousel">
+          {activeAccounts.length === 0 ? (
+            <div className="playful-wallet-card empty-wallet">
+              <strong>Belum ada dompet aktif</strong>
+              <p>Tambahkan dompet dari halaman Profil agar saldo bisa dipantau.</p>
+            </div>
+          ) : activeAccounts.map((account) => (
+            <article className={`playful-wallet-card ${walletAccent[account.type] || 'violet'}`} key={account.id}>
+              <div className="playful-wallet-top">
+                <span className="playful-wallet-icon"><AccountIcon type={account.type} /></span>
+                <span className="wallet-type-pill">{accountTypeLabel[account.type] || 'Dompet'}</span>
+              </div>
+              <h3>{account.name}</h3>
+              <strong>{formatRupiah(account.currentBalance)}</strong>
+              <p>{account.isActive ? 'Dompet aktif keluarga' : 'Dompet nonaktif'}</p>
+            </article>
+          ))}
+        </div>
+        {activeAccounts.length > 1 && <div className="wallet-scroll-hint"><span className="active" /><span /><span /></div>}
+      </section>
+
+      <section>
+        <SectionHead
+          title="Alokasi Anggaran"
+          action={<button className="section-link" type="button" onClick={() => goTo('budgets')}>Kelola</button>}
+        />
+        <Card className="playful-budget-card">
+          <div className="playful-budget-summary">
+            <div><span>Total alokasi</span><strong>{formatRupiah(totalBudget)}</strong></div>
+            <div><span>Terpakai</span><strong>{formatRupiah(totalUsed)}</strong></div>
+            <div><span>Sisa</span><strong>{formatRupiah(totalRemaining)}</strong></div>
+          </div>
+
+          {budgetUsages.length === 0 ? (
+            <div className="playful-empty-inline">
+              <Target size={18} />
+              <span>Belum ada alokasi bulan ini.</span>
+            </div>
+          ) : budgetUsages.slice(0, 3).map(({ budget, usage }) => {
+            const category = categories.find((cat) => cat.id === budget.categoryId);
+            const variant = usage.status === 'Aman' ? 'green' : usage.status === 'Mendekati' ? 'amber' : 'red';
+            return (
+              <div className="budget-row playful-budget-row" key={budget.id}>
+                <div className="budget-row-header">
+                  <div>
+                    <h3>{category?.name || 'Kategori'}</h3>
+                    <p className="item-sub">Sisa {formatRupiah(usage.remaining)}</p>
+                  </div>
+                  <StatusPill status={usage.status} />
+                </div>
+                <ProgressBar value={usage.percentage} variant={variant} />
+              </div>
+            );
+          })}
+        </Card>
+      </section>
+
+      <section className="grid-2 family-code-grid playful-info-grid">
         <button className="glass info-glass" type="button" onClick={copyInviteCode}>
-          <p>Kode Undangan</p>
+          <p>Kode Keluarga</p>
           <strong>{household?.inviteCode || '-'}</strong>
           <Copy size={15} />
         </button>
@@ -164,34 +277,10 @@ export default function Dashboard({ goTo }) {
         </button>
       </section>
 
-      <Card className="preview-section-card">
+      <Card className="playful-section-card">
         <SectionHead
-          title="Saldo per Akun / Dompet"
-          action={<button className="link-chip" type="button" onClick={() => goTo('family')}>Lihat semua</button>}
-        />
-
-        <div className="wallet-summary-list preview-wallet-list">
-          {activeAccounts.slice(0, 4).map((account) => (
-            <div className="wallet-summary-item preview-wallet-row" key={account.id}>
-              <div className={`wallet-summary-icon wallet-${account.type}`}>
-                <Wallet size={17} />
-              </div>
-
-              <div>
-                <p>{account.name}</p>
-                <span>{accountTypeLabel[account.type] || 'Akun Keluarga'}</span>
-              </div>
-
-              <strong>{formatRupiah(account.currentBalance)}</strong>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="preview-section-card">
-        <SectionHead
-          title="Transaksi Terbaru"
-          action={<button className="link-chip" type="button" onClick={() => goTo('transactions')}>Lihat semua</button>}
+          title="Aktivitas Terakhir"
+          action={<button className="section-link" type="button" onClick={() => goTo('transactions')}>Lihat semua</button>}
         />
         <TransactionList transactions={transactions.slice(0, 3)} categories={categories} accounts={accountBalances} compact />
       </Card>
