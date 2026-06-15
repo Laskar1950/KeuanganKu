@@ -1,0 +1,145 @@
+/* Bottom navigation final positioning fix
+   Keeps the Playful Family Professional nav inside the phone frame. */
+
+.phone-frame .bottom-nav,
+.playful-phone-frame .bottom-nav {
+  position: absolute !important;
+  left: 18px !important;
+  right: 18px !important;
+  bottom: 18px !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  transform: none !important;
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+  padding: 8px !important;
+  border-radius: 28px !important;
+  border: 1px solid rgba(255, 255, 255, 0.78) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 18px 45px rgba(119, 54, 34, 0.17) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  overflow: hidden !important;
+}
+
+.phone-frame .bottom-nav .nav-spacer,
+.playful-phone-frame .bottom-nav .nav-spacer {
+  display: none !important;
+}
+
+.phone-frame .bottom-nav .nav-btn,
+.playful-phone-frame .bottom-nav .nav-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 56px !important;
+  padding: 7px 2px !important;
+  border-radius: 20px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-content: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  color: #7c2d12 !important;
+  background: transparent !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  overflow: hidden !important;
+}
+
+.phone-frame .bottom-nav .nav-btn svg,
+.playful-phone-frame .bottom-nav .nav-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 auto !important;
+}
+
+.phone-frame .bottom-nav .nav-btn span,
+.playful-phone-frame .bottom-nav .nav-btn span {
+  width: 100% !important;
+  display: block !important;
+  text-align: center !important;
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.phone-frame .bottom-nav .nav-btn.active,
+.playful-phone-frame .bottom-nav .nav-btn.active {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, var(--rose), var(--orange)) !important;
+  box-shadow: 0 10px 24px rgba(244, 63, 94, 0.2) !important;
+}
+
+.phone-frame .fab,
+.playful-phone-frame .fab,
+.phone-frame .playful-fab,
+.playful-phone-frame .playful-fab {
+  position: absolute !important;
+  left: auto !important;
+  right: 28px !important;
+  bottom: 96px !important;
+  transform: none !important;
+  width: 58px !important;
+  height: 58px !important;
+  border-radius: 22px !important;
+  z-index: 25 !important;
+}
+
+.phone-frame .fab:hover,
+.playful-phone-frame .fab:hover,
+.phone-frame .playful-fab:hover,
+.playful-phone-frame .playful-fab:hover {
+  transform: translateY(-3px) scale(1.03) !important;
+}
+
+@media (min-width: 520px) {
+  .phone-frame .bottom-nav,
+  .playful-phone-frame .bottom-nav {
+    left: 18px !important;
+    right: 18px !important;
+    bottom: 18px !important;
+  }
+
+  .phone-frame .fab,
+  .playful-phone-frame .fab,
+  .phone-frame .playful-fab,
+  .playful-phone-frame .playful-fab {
+    right: 28px !important;
+    bottom: 96px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .phone-frame .bottom-nav,
+  .playful-phone-frame .bottom-nav {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 14px !important;
+    gap: 4px !important;
+    padding: 7px !important;
+  }
+
+  .phone-frame .bottom-nav .nav-btn,
+  .playful-phone-frame .bottom-nav .nav-btn {
+    min-height: 54px !important;
+  }
+
+  .phone-frame .bottom-nav .nav-btn span,
+  .playful-phone-frame .bottom-nav .nav-btn span {
+    font-size: 9px !important;
+  }
+
+  .phone-frame .fab,
+  .playful-phone-frame .fab,
+  .phone-frame .playful-fab,
+  .playful-phone-frame .playful-fab {
+    right: 20px !important;
+    bottom: 92px !important;
+  }
+}
