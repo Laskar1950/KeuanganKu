@@ -1,21 +1,42 @@
 import React, { useState } from 'react';
-import { ArrowLeft, KeyRound, Mail, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, KeyRound, Mail, ShieldCheck, UserPlus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 
-const initialForm = { name: '', email: '', password: '' };
+const initialForm = { name: '', identifier: '', email: '', password: '' };
+
+function normalizeUsername(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
 
 export default function AuthPage() {
   const { register, login, notify } = useApp();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const changeMode = (nextMode) => {
     setMode(nextMode);
+    setShowPassword(false);
     if (nextMode === 'login') setForm(initialForm);
+  };
+
+  const resolveLoginEmail = async () => {
+    const identifier = form.identifier.trim();
+    if (!identifier) throw new Error('Email atau username wajib diisi.');
+    if (identifier.includes('@')) return identifier;
+
+    const { data, error } = await supabase.rpc('get_login_email', { p_identifier: identifier });
+    if (error) throw error;
+    if (!data) throw new Error('Username tidak ditemukan. Coba masuk menggunakan email.');
+    return data;
   };
 
   const submit = async (event) => {
@@ -24,14 +45,15 @@ export default function AuthPage() {
       setLoading(true);
 
       if (mode === 'register') {
-        await register(form);
+        const username = normalizeUsername(form.identifier || form.email.split('@')[0]);
+        await register({ name: form.name, email: form.email, password: form.password, username });
         setMode('login');
         return;
       }
 
       if (mode === 'forgot') {
-        if (!form.email) throw new Error('Masukkan email terlebih dahulu untuk reset password.');
-        const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
+        const email = await resolveLoginEmail();
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin,
         });
         if (error) throw error;
@@ -40,7 +62,8 @@ export default function AuthPage() {
         return;
       }
 
-      await login(form);
+      const email = await resolveLoginEmail();
+      await login({ email, password: form.password });
     } catch (error) {
       notify(error.message);
     } finally {
@@ -70,9 +93,9 @@ export default function AuthPage() {
             {isRegister
               ? 'Daftar akun baru untuk membuat atau bergabung ke ruang keuangan keluarga.'
               : isForgot
-                ? 'Masukkan email akun. Kami akan mengirim tautan reset password melalui email.'
+                ? 'Masukkan email atau username. Kami akan mengirim tautan reset password melalui email.'
                 : isHelp
-                  ? 'Jika mengalami kendala login, cek email dan password terlebih dahulu atau hubungi pengelola keluarga.'
+                  ? 'Jika mengalami kendala login, cek email, username, dan password terlebih dahulu atau hubungi pengelola keluarga.'
                   : 'Pantau dompet, alokasi, transaksi, dan laporan keluarga dari satu aplikasi yang ringan.'}
           </p>
         </div>
@@ -80,12 +103,11 @@ export default function AuthPage() {
         <div className="auth-soft-card">
           {isHelp ? (
             <div className="auth-help-panel">
-              <div className="auth-form-title">
+              <div className="auth-form-title no-badge">
                 <strong>Bantuan Login</strong>
-                <span>Info</span>
               </div>
               <div className="auth-help-list">
-                <div><Mail size={16} /><p>Pastikan email yang digunakan sama dengan email saat daftar.</p></div>
+                <div><Mail size={16} /><p>Masuk bisa menggunakan email atau username akun.</p></div>
                 <div><KeyRound size={16} /><p>Gunakan menu Lupa Password jika tidak ingat password.</p></div>
                 <div><ShieldCheck size={16} /><p>Jika belum punya akun, pilih Daftar akun baru.</p></div>
               </div>
@@ -95,9 +117,8 @@ export default function AuthPage() {
             </div>
           ) : (
             <form className="auth-soft-form" onSubmit={submit}>
-              <div className="auth-form-title">
+              <div className="auth-form-title no-badge">
                 <strong>{isRegister ? 'Daftar' : isForgot ? 'Lupa Password' : 'Login'}</strong>
-                <span>{isRegister ? 'Baru' : isForgot ? 'Reset' : 'Aman'}</span>
               </div>
 
               {isRegister && (
@@ -107,20 +128,38 @@ export default function AuthPage() {
                 </div>
               )}
 
-              <div className="field auth-soft-field">
-                <label>Email</label>
-                <input type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="nama@email.com" />
-              </div>
+              {isRegister ? (
+                <>
+                  <div className="field auth-soft-field">
+                    <label>Username</label>
+                    <input value={form.identifier} onChange={(e) => setField('identifier', e.target.value)} placeholder="contoh: rizki_afrizal" autoCapitalize="none" />
+                  </div>
+                  <div className="field auth-soft-field">
+                    <label>Email</label>
+                    <input type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="nama@email.com" autoCapitalize="none" />
+                  </div>
+                </>
+              ) : (
+                <div className="field auth-soft-field">
+                  <label>{isForgot ? 'Email atau Username' : 'Email / Username'}</label>
+                  <input type="text" value={form.identifier} onChange={(e) => setField('identifier', e.target.value)} placeholder="email atau username" autoCapitalize="none" />
+                </div>
+              )}
 
               {!isForgot && (
-                <div className="field auth-soft-field">
+                <div className="field auth-soft-field auth-password-field">
                   <label>Password</label>
-                  <input type="password" value={form.password} onChange={(e) => setField('password', e.target.value)} placeholder="Minimal 6 karakter" autoComplete={isRegister ? 'new-password' : 'current-password'} />
+                  <div className="auth-password-control">
+                    <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(e) => setField('password', e.target.value)} placeholder="Minimal 6 karakter" autoComplete={isRegister ? 'new-password' : 'current-password'} />
+                    <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}>
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
               )}
 
               <button className="auth-soft-primary" type="submit" disabled={loading}>
-                {loading ? 'Memproses...' : isRegister ? 'Daftar Akun' : isForgot ? 'Kirim Link Reset' : 'Masuk ke KeuanganKu'}
+                {loading ? 'Memproses...' : isRegister ? 'Daftar Akun' : isForgot ? 'Kirim Link Reset' : 'Masuk'}
               </button>
 
               {!isForgot && !isRegister && (
