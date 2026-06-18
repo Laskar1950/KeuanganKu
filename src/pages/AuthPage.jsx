@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, HelpCircle, KeyRound, Mail, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, KeyRound, Mail, ShieldCheck, UserPlus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 
