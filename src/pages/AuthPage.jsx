@@ -14,7 +14,7 @@ function normalizeUsername(value) {
 }
 
 export default function AuthPage() {
-  const { register, login, notify } = useApp();
+  const { login, notify } = useApp();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
@@ -39,14 +39,42 @@ export default function AuthPage() {
     return data;
   };
 
+  const registerAccount = async () => {
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const username = normalizeUsername(form.identifier || email.split('@')[0]);
+
+    if (!name || !email || !form.password) throw new Error('Nama, email, dan password wajib diisi.');
+    if (!username || username.length < 3) throw new Error('Username minimal 3 karakter.');
+    if (form.password.length < 6) throw new Error('Password minimal 6 karakter.');
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: form.password,
+      options: { data: { name, username } },
+    });
+    if (error) throw error;
+
+    if (data.user) {
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: data.user.id,
+        name,
+        email,
+        username,
+      });
+      if (profileError && profileError.code !== '42501') throw profileError;
+    }
+
+    notify('Registrasi berhasil. Silakan login atau cek email jika konfirmasi email aktif.');
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     try {
       setLoading(true);
 
       if (mode === 'register') {
-        const username = normalizeUsername(form.identifier || form.email.split('@')[0]);
-        await register({ name: form.name, email: form.email, password: form.password, username });
+        await registerAccount();
         setMode('login');
         return;
       }
