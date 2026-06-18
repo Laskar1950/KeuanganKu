@@ -19,16 +19,19 @@ set name = 'Alokasi Anggaran'
 where name is null;
 
 -- Assign a source account to legacy budgets using the first active account in the same family.
-update public.budgets b
-set account_id = a.id
-from lateral (
-  select id
+-- CTE is used because the target table alias cannot be referenced inside a FROM subquery in this UPDATE form.
+with first_family_accounts as (
+  select distinct on (family_id)
+    family_id,
+    id as account_id
   from public.accounts
-  where family_id = b.family_id
-  order by is_active desc, created_at asc
-  limit 1
-) a
-where b.account_id is null;
+  order by family_id, is_active desc, created_at asc
+)
+update public.budgets b
+set account_id = ffa.account_id
+from first_family_accounts ffa
+where b.family_id = ffa.family_id
+  and b.account_id is null;
 
 -- New allocation flow no longer requires expense category.
 alter table public.budgets
