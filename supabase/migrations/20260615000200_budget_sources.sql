@@ -19,7 +19,6 @@ set name = 'Alokasi Anggaran'
 where name is null;
 
 -- Assign a source account to legacy budgets using the first active account in the same family.
--- CTE is used because the target table alias cannot be referenced inside a FROM subquery in this UPDATE form.
 with first_family_accounts as (
   select distinct on (family_id)
     family_id,
