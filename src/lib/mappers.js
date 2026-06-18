@@ -80,6 +80,18 @@ export const toBudget = (row) => ({
   updatedAt: row.updated_at,
 });
 
+export const toNotification = (row) => ({
+  id: row.id,
+  familyId: row.family_id,
+  userId: row.user_id || null,
+  type: row.type || 'general',
+  title: row.title || 'Notifikasi',
+  message: row.message || '',
+  target: row.target || 'dashboard',
+  readAt: row.read_at || null,
+  createdAt: row.created_at,
+});
+
 export const toSavingGoal = (row) => ({
   id: row.id,
   familyId: row.family_id,
