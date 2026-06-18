@@ -1,0 +1,32 @@
+.notification-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.notification-actions-row .small-btn {
+  min-height: 34px;
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+}
+
+.notification-item.unread {
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.13), rgba(251, 146, 60, 0.12)) !important;
+  border-color: rgba(251, 113, 133, 0.22) !important;
+}
+
+.notification-item.read {
+  opacity: 0.72;
+}
+
+.notification-item.read strong,
+.notification-item.read small {
+  color: var(--muted) !important;
+}
+
+@media (max-width: 390px) {
+  .notification-actions-row {
+    grid-template-columns: 1fr;
+  }
+}
