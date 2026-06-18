@@ -7,6 +7,7 @@ import './settings-polish.css';
 import './budget-allocation.css';
 import './playful-professional.css';
 import './navigation-fix.css';
+import './notifications.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
