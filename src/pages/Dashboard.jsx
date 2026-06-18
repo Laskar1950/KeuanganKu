@@ -53,32 +53,25 @@ function AccountIcon({ type }) {
   return <Icon size={18} />;
 }
 
-function buildNotifications({ transactions, familyMembers }) {
-  const transactionNotifications = transactions.slice(0, 4).map((trx) => ({
-    id: `trx-${trx.id}`,
-    type: 'transaction',
-    title: trx.type === 'income' ? 'Pemasukan baru dicatat' : 'Pengeluaran baru dicatat',
-    description: `${trx.createdByProfile?.name || 'Anggota keluarga'} mencatat ${trx.note || 'transaksi'} pada ${formatDate(trx.transactionDate)}.`,
-    target: 'transactions',
-    createdAt: trx.createdAt || trx.transactionDate,
-  }));
-
-  const memberNotifications = familyMembers.slice(-3).reverse().map((member) => ({
-    id: `member-${member.id}`,
-    type: 'member',
-    title: 'Anggota keluarga bergabung',
-    description: `${member.profile?.name || 'Anggota keluarga'} sekarang tergabung sebagai ${member.role}.`,
-    target: 'family',
-    createdAt: member.createdAt,
-  }));
-
-  return [...transactionNotifications, ...memberNotifications]
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    .slice(0, 6);
+function NotificationIcon({ type }) {
+  if (type === 'member') return <UserPlus size={16} />;
+  return <ReceiptText size={16} />;
 }
 
 export default function Dashboard({ goTo }) {
-  const { household, familyMembers, transactions, categories, accountBalances, budgets, copyInviteCode } = useApp();
+  const {
+    household,
+    familyMembers,
+    transactions,
+    categories,
+    accountBalances,
+    budgets,
+    notifications,
+    copyInviteCode,
+    requestNotificationPermission,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useApp();
   const { month, year } = currentMonthYear();
   const [showBalance, setShowBalance] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -88,8 +81,7 @@ export default function Dashboard({ goTo }) {
   const expense = sumByType(monthTransactions, 'expense');
   const totalBalance = getTotalBalance(accountBalances, transactions);
   const activeAccounts = accountBalances.filter((acc) => acc.isActive);
-  const notifications = useMemo(() => buildNotifications({ transactions, familyMembers }), [transactions, familyMembers]);
-  const unreadCount = notifications.length;
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
 
   const monthBudgets = useMemo(
     () => budgets.filter((budget) => budget.month === month && budget.year === year),
@@ -105,9 +97,10 @@ export default function Dashboard({ goTo }) {
   const totalUsed = budgetUsages.reduce((total, item) => total + Number(item.usage.used || 0), 0);
   const totalRemaining = totalBudget - totalUsed;
 
-  const openNotification = (notification) => {
+  const openNotification = async (notification) => {
     setNotificationOpen(false);
-    goTo(notification.target);
+    if (!notification.readAt) await markNotificationRead(notification.id);
+    goTo(notification.target || 'dashboard');
   };
 
   return (
@@ -137,7 +130,12 @@ export default function Dashboard({ goTo }) {
             <div className="notification-popover playful-notification-popover">
               <div className="notification-head">
                 <strong>Notifikasi</strong>
-                <span>{unreadCount} baru</span>
+                <span>{unreadCount} belum dibaca</span>
+              </div>
+
+              <div className="notification-actions-row">
+                <button type="button" className="small-btn" onClick={requestNotificationPermission}>Aktifkan push</button>
+                {unreadCount > 0 && <button type="button" className="small-btn" onClick={markAllNotificationsRead}>Tandai dibaca</button>}
               </div>
 
               {notifications.length === 0 ? (
@@ -146,17 +144,17 @@ export default function Dashboard({ goTo }) {
                 <div className="notification-list">
                   {notifications.map((notification) => (
                     <button
-                      className="notification-item"
+                      className={`notification-item ${notification.readAt ? 'read' : 'unread'}`}
                       key={notification.id}
                       type="button"
                       onClick={() => openNotification(notification)}
                     >
                       <span className={`notification-icon ${notification.type}`}>
-                        {notification.type === 'member' ? <UserPlus size={16} /> : <ReceiptText size={16} />}
+                        <NotificationIcon type={notification.type} />
                       </span>
                       <span>
                         <strong>{notification.title}</strong>
-                        <small>{notification.description}</small>
+                        <small>{notification.message || formatDate(notification.createdAt)}</small>
                       </span>
                     </button>
                   ))}
