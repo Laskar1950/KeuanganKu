@@ -18,7 +18,7 @@ import {
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar, SectionHead, StatusPill } from '../components/UI.jsx';
 import TransactionList from '../components/TransactionList.jsx';
-import { currentMonthYear, formatDate, formatRupiah } from '../utils/format.js';
+import { currentMonthYear, formatRupiah } from '../utils/format.js';
 import { getBudgetUsage, getMonthTransactions, getTotalBalance, sumByType } from '../utils/calculations.js';
 
 const accountTypeLabel = {
@@ -81,7 +81,8 @@ export default function Dashboard({ goTo }) {
   const expense = sumByType(monthTransactions, 'expense');
   const totalBalance = getTotalBalance(accountBalances, transactions);
   const activeAccounts = accountBalances.filter((acc) => acc.isActive);
-  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+  const unreadNotifications = notifications.filter((notification) => !notification.readAt);
+  const unreadCount = unreadNotifications.length;
 
   const monthBudgets = useMemo(
     () => budgets.filter((budget) => budget.month === month && budget.year === year),
@@ -98,9 +99,17 @@ export default function Dashboard({ goTo }) {
   const totalRemaining = totalBudget - totalUsed;
 
   const openNotification = async (notification) => {
+    await markNotificationRead(notification.id);
     setNotificationOpen(false);
-    if (!notification.readAt) await markNotificationRead(notification.id);
     goTo(notification.target || 'dashboard');
+  };
+
+  const markAsReadOnly = async (notification) => {
+    await markNotificationRead(notification.id);
+  };
+
+  const markAllAsRead = async () => {
+    await markAllNotificationsRead();
   };
 
   return (
@@ -135,28 +144,31 @@ export default function Dashboard({ goTo }) {
 
               <div className="notification-actions-row">
                 <button type="button" className="small-btn" onClick={requestNotificationPermission}>Aktifkan push</button>
-                {unreadCount > 0 && <button type="button" className="small-btn" onClick={markAllNotificationsRead}>Tandai dibaca</button>}
+                {unreadCount > 0 && <button type="button" className="small-btn" onClick={markAllAsRead}>Semua sudah dibaca</button>}
               </div>
 
-              {notifications.length === 0 ? (
-                <p className="muted tiny notification-empty">Belum ada notifikasi.</p>
+              {unreadNotifications.length === 0 ? (
+                <p className="muted tiny notification-empty">Tidak ada notifikasi baru.</p>
               ) : (
                 <div className="notification-list">
-                  {notifications.map((notification) => (
-                    <button
-                      className={`notification-item ${notification.readAt ? 'read' : 'unread'}`}
+                  {unreadNotifications.map((notification) => (
+                    <div
+                      className="notification-item unread"
                       key={notification.id}
-                      type="button"
-                      onClick={() => openNotification(notification)}
                     >
-                      <span className={`notification-icon ${notification.type}`}>
-                        <NotificationIcon type={notification.type} />
-                      </span>
-                      <span>
-                        <strong>{notification.title}</strong>
-                        <small>{notification.message || formatDate(notification.createdAt)}</small>
-                      </span>
-                    </button>
+                      <button className="notification-main" type="button" onClick={() => openNotification(notification)}>
+                        <span className={`notification-icon ${notification.type}`}>
+                          <NotificationIcon type={notification.type} />
+                        </span>
+                        <span>
+                          <strong>{notification.title}</strong>
+                          <small>{notification.message || 'Ada aktivitas baru di KeuanganKu.'}</small>
+                        </span>
+                      </button>
+                      <button className="notification-mark-read" type="button" onClick={() => markAsReadOnly(notification)}>
+                        Sudah dibaca
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
