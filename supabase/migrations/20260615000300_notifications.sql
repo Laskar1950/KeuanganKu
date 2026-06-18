@@ -1,0 +1,53 @@
+-- Realtime notifications for KeuanganKu.
+-- Run after 20260524000100_initial_schema.sql.
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references public.families(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  type text not null default 'general',
+  title text not null,
+  message text,
+  target text not null default 'dashboard',
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_family_created_idx on public.notifications(family_id, created_at desc);
+create index if not exists notifications_user_read_idx on public.notifications(user_id, read_at);
+
+alter table public.notifications enable row level security;
+
+create policy "notifications_select_member" on public.notifications
+for select to authenticated
+using (
+  public.is_family_member(family_id)
+  and (user_id is null or user_id = auth.uid())
+);
+
+create policy "notifications_insert_member" on public.notifications
+for insert to authenticated
+with check (
+  public.is_family_member(family_id)
+  and (user_id is null or public.is_family_member(family_id))
+);
+
+create policy "notifications_update_member" on public.notifications
+for update to authenticated
+using (
+  public.is_family_member(family_id)
+  and (user_id is null or user_id = auth.uid())
+)
+with check (
+  public.is_family_member(family_id)
+  and (user_id is null or user_id = auth.uid())
+);
+
+-- Enable Supabase Realtime for INSERT events on notifications.
+do $$
+begin
+  execute 'alter publication supabase_realtime add table public.notifications';
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;
