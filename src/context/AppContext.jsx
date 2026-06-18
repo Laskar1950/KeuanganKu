@@ -6,6 +6,7 @@ import {
   toCategory,
   toFamilyMember,
   toHousehold,
+  toNotification,
   toProfile,
   toSavingGoal,
   toTransaction,
@@ -24,6 +25,7 @@ const emptyState = {
   transactions: [],
   budgets: [],
   savingGoals: [],
+  notifications: [],
 };
 
 function requireSupabaseEnv() {
@@ -41,6 +43,24 @@ function assertOwner(member) {
 function getTransactionCycle(dateString) {
   const [year, month] = String(dateString || '').split('-').map(Number);
   return { month, year };
+}
+
+function formatCurrency(amount) {
+  return `Rp${Number(amount || 0).toLocaleString('id-ID')}`;
+}
+
+function showBrowserNotification(title, message) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (window.Notification.permission !== 'granted') return;
+  try {
+    new window.Notification(title, {
+      body: message || 'Ada aktivitas baru di KeuanganKu.',
+      icon: '/vite.svg',
+      badge: '/vite.svg',
+    });
+  } catch {
+    // Browser notification is optional. Ignore failures silently.
+  }
 }
 
 export function AppProvider({ children }) {
@@ -151,6 +171,16 @@ export function AppProvider({ children }) {
       const error = membersRes.error || categoriesRes.error || accountsRes.error || transactionsRes.error || budgetsRes.error || goalsRes.error;
       if (error) throw error;
 
+      const notificationsRes = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('family_id', household.id)
+        .or(`user_id.is.null,user_id.eq.${authUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (notificationsRes.error && notificationsRes.error.code !== '42P01') throw notificationsRes.error;
+
       setState({
         session,
         user,
@@ -161,6 +191,7 @@ export function AppProvider({ children }) {
         transactions: transactionsRes.data.map(toTransaction),
         budgets: budgetsRes.data.map(toBudget),
         savingGoals: goalsRes.data.map(toSavingGoal),
+        notifications: notificationsRes.error ? [] : notificationsRes.data.map(toNotification),
       });
     } finally {
       setLoading(false);
@@ -193,6 +224,101 @@ export function AppProvider({ children }) {
       listener.subscription.unsubscribe();
     };
   }, [refreshData]);
+
+  useEffect(() => {
+    if (!state.household?.id || !state.user?.id) return undefined;
+
+    const channel = supabase
+      .channel(`family-notifications-${state.household.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `family_id=eq.${state.household.id}` },
+        (payload) => {
+          const notification = toNotification(payload.new);
+          if (notification.userId && notification.userId !== state.user.id) return;
+
+          setState((prev) => ({
+            ...prev,
+            notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
+          }));
+
+          notify(notification.title);
+          showBrowserNotification(notification.title, notification.message);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [state.household?.id, state.user?.id]);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      notify('Browser ini belum mendukung notifikasi.');
+      return 'unsupported';
+    }
+
+    const permission = await window.Notification.requestPermission();
+    notify(permission === 'granted' ? 'Notifikasi browser diaktifkan.' : 'Izin notifikasi belum diberikan.');
+    return permission;
+  };
+
+  const createNotification = async ({ type = 'general', title, message, target = 'dashboard', userId = null }) => {
+    if (!state.household?.id || !title) return null;
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        family_id: state.household.id,
+        user_id: userId,
+        type,
+        title,
+        message: message || null,
+        target,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      // Keep core transaction flow safe if notification migration has not been run yet.
+      console.warn('Notification insert skipped:', error.message);
+      return null;
+    }
+
+    const notification = toNotification(data);
+    setState((prev) => ({
+      ...prev,
+      notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
+    }));
+    showBrowserNotification(notification.title, notification.message);
+    return notification;
+  };
+
+  const markNotificationRead = async (id) => {
+    const readAt = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      notifications: prev.notifications.map((item) => (item.id === id ? { ...item, readAt } : item)),
+    }));
+
+    const { error } = await supabase.from('notifications').update({ read_at: readAt }).eq('id', id);
+    if (error) console.warn('Mark notification read skipped:', error.message);
+  };
+
+  const markAllNotificationsRead = async () => {
+    const readAt = new Date().toISOString();
+    const ids = state.notifications.filter((item) => !item.readAt).map((item) => item.id);
+    if (!ids.length) return;
+
+    setState((prev) => ({
+      ...prev,
+      notifications: prev.notifications.map((item) => (ids.includes(item.id) ? { ...item, readAt } : item)),
+    }));
+
+    const { error } = await supabase.from('notifications').update({ read_at: readAt }).in('id', ids);
+    if (error) console.warn('Mark all notifications read skipped:', error.message);
+  };
 
   const register = async ({ name, email, password }) => {
     requireSupabaseEnv();
@@ -346,6 +472,13 @@ export function AppProvider({ children }) {
     });
     if (error) throw error;
 
+    await createNotification({
+      type: 'transaction',
+      title: isExpense ? 'Pengeluaran baru dicatat' : 'Pemasukan baru dicatat',
+      message: `${state.user?.name || 'Anggota keluarga'} mencatat ${isExpense ? 'pengeluaran' : 'pemasukan'} ${formatCurrency(payload.amount)}${isExpense && budget?.name ? ` dari alokasi ${budget.name}` : ''}.`,
+      target: 'transactions',
+    });
+
     notify(isExpense ? 'Pengeluaran berhasil disimpan, alokasi dan saldo dompet otomatis berkurang.' : 'Transaksi berhasil disimpan.');
     await refreshData();
   };
@@ -376,6 +509,13 @@ export function AppProvider({ children }) {
       .eq('id', id);
     if (error) throw error;
 
+    await createNotification({
+      type: 'transaction',
+      title: 'Transaksi diperbarui',
+      message: `${state.user?.name || 'Anggota keluarga'} memperbarui transaksi ${formatCurrency(payload.amount)}.`,
+      target: 'transactions',
+    });
+
     notify(isExpense ? 'Pengeluaran berhasil diperbarui, alokasi dan saldo dompet ikut disesuaikan.' : 'Transaksi berhasil diperbarui.');
     await refreshData();
   };
@@ -383,6 +523,13 @@ export function AppProvider({ children }) {
   const deleteTransaction = async (id) => {
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) throw error;
+
+    await createNotification({
+      type: 'transaction',
+      title: 'Transaksi dihapus',
+      message: `${state.user?.name || 'Anggota keluarga'} menghapus transaksi.`,
+      target: 'transactions',
+    });
 
     notify('Transaksi berhasil dihapus.');
     await refreshData();
@@ -404,6 +551,13 @@ export function AppProvider({ children }) {
       is_active: true,
     });
     if (error) throw error;
+
+    await createNotification({
+      type: 'account',
+      title: 'Dompet baru ditambahkan',
+      message: `${state.user?.name || 'Owner'} menambahkan dompet ${payload.name}.`,
+      target: 'settings',
+    });
 
     notify('Akun/dompet berhasil ditambahkan.');
     await refreshData();
@@ -506,6 +660,13 @@ export function AppProvider({ children }) {
     });
     if (error) throw error;
 
+    await createNotification({
+      type: 'budget',
+      title: 'Alokasi baru dibuat',
+      message: `${state.user?.name || 'Anggota keluarga'} membuat alokasi ${payload.name} sebesar ${formatCurrency(payload.amount)} dari ${account.name}.`,
+      target: 'budgets',
+    });
+
     notify('Alokasi anggaran berhasil dibuat.');
     await refreshData();
   };
@@ -513,6 +674,13 @@ export function AppProvider({ children }) {
   const deleteBudget = async (id) => {
     const { error } = await supabase.from('budgets').delete().eq('id', id);
     if (error) throw error;
+
+    await createNotification({
+      type: 'budget',
+      title: 'Alokasi dihapus',
+      message: `${state.user?.name || 'Anggota keluarga'} menghapus alokasi anggaran.`,
+      target: 'budgets',
+    });
 
     notify('Alokasi anggaran berhasil dihapus.');
     await refreshData();
@@ -531,6 +699,13 @@ export function AppProvider({ children }) {
       status: 'active',
     });
     if (error) throw error;
+
+    await createNotification({
+      type: 'goal',
+      title: 'Target tabungan baru',
+      message: `${state.user?.name || 'Anggota keluarga'} membuat target ${payload.name} sebesar ${formatCurrency(payload.targetAmount)}.`,
+      target: 'settings',
+    });
 
     notify('Target tabungan berhasil dibuat.');
     await refreshData();
@@ -558,6 +733,13 @@ export function AppProvider({ children }) {
       .eq('id', id);
     if (goalError) throw goalError;
 
+    await createNotification({
+      type: 'goal',
+      title: 'Setoran tabungan masuk',
+      message: `${state.user?.name || 'Anggota keluarga'} menyetor ${formatCurrency(amount)} ke target ${goal.name}.`,
+      target: 'settings',
+    });
+
     notify('Setoran tabungan berhasil ditambahkan.');
     await refreshData();
   };
@@ -574,6 +756,9 @@ export function AppProvider({ children }) {
     toast,
     notify,
     refreshData,
+    requestNotificationPermission,
+    markNotificationRead,
+    markAllNotificationsRead,
     register,
     login,
     loginDemo,
