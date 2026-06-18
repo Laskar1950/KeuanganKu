@@ -6,6 +6,7 @@ export const toProfile = (row, authUser) => ({
     authUser?.email?.split('@')[0] ||
     'Pengguna',
   email: row?.email || authUser?.email || '',
+  username: row?.username || authUser?.user_metadata?.username || authUser?.email?.split('@')[0] || '',
   avatarUrl: row?.avatar_url || authUser?.user_metadata?.avatar_url || '',
   createdAt: row?.created_at || authUser?.created_at,
 });
