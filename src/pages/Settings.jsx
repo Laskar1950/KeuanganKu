@@ -12,6 +12,7 @@ import {
   Tags,
   Trash2,
   Upload,
+  UserPlus,
   UserRound,
   UsersRound,
   Wallet,
@@ -25,9 +26,18 @@ import { formatRupiah } from '../utils/format.js';
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 const accountTypeLabel = { cash: 'Cash', bank: 'Bank', ewallet: 'E-Wallet', saving: 'Tabungan', other: 'Lainnya' };
 const emptyAccountForm = { name: '', type: 'cash', initialBalance: '' };
+const emptyMemberForm = { identifier: '', role: 'member' };
 
 function initials(name = 'Pengguna') {
   return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'P';
+}
+
+function normalizeUsername(value = '') {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'user';
 }
 
 function ProfileAvatar({ user, size = 'large' }) {
@@ -71,6 +81,11 @@ export default function Settings() {
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', currentAmount: '', targetDate: '', note: '' });
   const [deposit, setDeposit] = useState({ id: '', amount: '' });
 
+  const [memberForm, setMemberForm] = useState(emptyMemberForm);
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const [addingMember, setAddingMember] = useState(false);
+  const [processingMemberId, setProcessingMemberId] = useState('');
+
   const isOwner = currentMember?.role === 'owner';
   const incomeCategories = categories.filter((category) => category.type === 'income');
   const familyIncomeCategories = incomeCategories.filter((category) => category.familyId);
@@ -80,13 +95,30 @@ export default function Settings() {
     setProfileForm({ name: user?.name || '', avatarUrl: user?.avatarUrl || '' });
   }, [user?.name, user?.avatarUrl]);
 
+  useEffect(() => {
+    const drafts = {};
+    familyMembers.forEach((member) => {
+      drafts[member.id] = member.role === 'owner' ? 'member' : member.role || 'member';
+    });
+    setRoleDrafts(drafts);
+  }, [familyMembers]);
+
   const goMenu = () => setActivePanel('menu');
 
   const saveProfileData = async ({ name, avatarUrl }) => {
-    const payload = { id: user.id, name: name.trim(), email: user.email, avatar_url: avatarUrl?.trim() || null };
+    const username = user?.username || normalizeUsername(user?.email?.split('@')[0] || name);
+    const payload = {
+      id: user.id,
+      name: name.trim(),
+      email: user.email,
+      username,
+      avatar_url: avatarUrl?.trim() || null,
+    };
     const { error: profileError } = await supabase.from('profiles').upsert(payload);
     if (profileError) throw profileError;
-    const { error: authError } = await supabase.auth.updateUser({ data: { name: payload.name, avatar_url: payload.avatar_url } });
+    const { error: authError } = await supabase.auth.updateUser({
+      data: { name: payload.name, username: payload.username, avatar_url: payload.avatar_url },
+    });
     if (authError) throw authError;
   };
 
@@ -178,6 +210,61 @@ export default function Settings() {
     catch (error) { notify(error.message); }
   };
 
+  const submitAddMember = async (event) => {
+    event.preventDefault();
+    try {
+      if (!isOwner) throw new Error('Hanya owner yang bisa menambahkan anggota.');
+      if (!memberForm.identifier.trim()) throw new Error('Email atau username anggota wajib diisi.');
+      setAddingMember(true);
+      const { error } = await supabase.rpc('add_family_member_by_identifier', {
+        p_identifier: memberForm.identifier.trim(),
+        p_role: memberForm.role,
+      });
+      if (error) throw error;
+      setMemberForm(emptyMemberForm);
+      notify('Anggota berhasil ditambahkan ke keluarga.');
+      await refreshData();
+    } catch (error) { notify(error.message); }
+    finally { setAddingMember(false); }
+  };
+
+  const saveMemberRole = async (member) => {
+    try {
+      if (!isOwner) throw new Error('Hanya owner yang bisa mengubah role anggota.');
+      if (member.userId === user?.id) throw new Error('Owner tidak bisa mengubah role dirinya sendiri.');
+      const nextRole = roleDrafts[member.id] || member.role;
+      if (!nextRole || nextRole === 'owner') throw new Error('Role tidak valid.');
+      if (nextRole === member.role) {
+        notify('Role anggota tidak berubah.');
+        return;
+      }
+      setProcessingMemberId(member.id);
+      const { error } = await supabase.rpc('update_family_member_role', {
+        p_member_id: member.id,
+        p_role: nextRole,
+      });
+      if (error) throw error;
+      notify('Role anggota berhasil diperbarui.');
+      await refreshData();
+    } catch (error) { notify(error.message); }
+    finally { setProcessingMemberId(''); }
+  };
+
+  const removeMember = async (member) => {
+    try {
+      if (!isOwner) throw new Error('Hanya owner yang bisa menghapus anggota.');
+      if (member.userId === user?.id) throw new Error('Owner tidak bisa menghapus dirinya sendiri.');
+      const memberName = member.profile?.name || member.profile?.email || 'anggota ini';
+      if (!window.confirm(`Hapus ${memberName} dari keluarga?`)) return;
+      setProcessingMemberId(member.id);
+      const { error } = await supabase.rpc('remove_family_member', { p_member_id: member.id });
+      if (error) throw error;
+      notify('Anggota berhasil dihapus dari keluarga.');
+      await refreshData();
+    } catch (error) { notify(error.message); }
+    finally { setProcessingMemberId(''); }
+  };
+
   const handleLogout = async () => { try { await logout(); } catch (error) { notify(error.message); } };
 
   const renderPanelHeader = (title, kicker = 'Pengaturan') => (
@@ -207,6 +294,7 @@ export default function Settings() {
             <p className="section-kicker">Akun aktif</p>
             <h2>{user?.name || 'Pengguna'}</h2>
             <p className="muted tiny">{user?.email}</p>
+            {user?.username && <p className="muted tiny">@{user.username}</p>}
             <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
           </div>
         </div>
@@ -223,7 +311,7 @@ export default function Settings() {
       <section className="settings-menu-section">
         <p className="section-kicker">Keluarga</p>
         <div className="settings-menu-list">
-          <SettingsMenuButton icon={UsersRound} title="Anggota Keluarga" description="Lihat anggota dan kode undangan keluarga." badge={`${familyMembers.length} orang`} onClick={() => setActivePanel('family')} />
+          <SettingsMenuButton icon={UsersRound} title="Anggota Keluarga" description="Kelola anggota, tambah anggota, dan ubah role." badge={`${familyMembers.length} orang`} onClick={() => setActivePanel('family')} />
           <SettingsMenuButton icon={Wallet} title="Dompet Keluarga" description="Kelola dompet dan saldo awal." badge={`${accountBalances.length} dompet`} onClick={() => setActivePanel('wallets')} />
         </div>
       </section>
@@ -254,12 +342,14 @@ export default function Settings() {
             <p className="section-kicker">Informasi Akun</p>
             <h2>{user?.name || 'Pengguna'}</h2>
             <p className="muted tiny">{user?.email}</p>
+            {user?.username && <p className="muted tiny">@{user.username}</p>}
             <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
           </div>
         </div>
         <form className="form-grid profile-edit-form" onSubmit={submitProfile}>
           <div className="field"><label>Nama profil</label><input value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} placeholder="Nama Anda" /></div>
           <div className="field"><label>Email</label><input value={user?.email || ''} disabled readOnly /></div>
+          <div className="field"><label>Username</label><input value={user?.username ? `@${user.username}` : '-'} disabled readOnly /></div>
           <div className="field"><label>Foto profil</label><button className="upload-photo-btn" type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}><Upload size={16} /> {uploadingAvatar ? 'Mengupload...' : 'Pilih Foto dari Perangkat'}</button></div>
           <p className="muted tiny">Format yang didukung: JPG, PNG, WEBP, atau GIF. Maksimal 5MB.</p>
           <button className="primary-btn" type="submit"><Save size={16} /> Simpan Profil</button>
@@ -298,9 +388,94 @@ export default function Settings() {
         <div className="invite-box family-invite-box"><div><p className="mini-label">Kode undangan keluarga</p><strong>{household?.inviteCode || '-'}</strong></div><button className="small-btn" onClick={copyInviteCode} type="button"><Copy size={14} /> Salin</button></div>
       </Card>
 
-      <Card className="family-members-card">
-        <div className="row-between"><div><p className="section-kicker">Daftar Anggota</p><h2>{familyMembers.length} Anggota</h2></div><span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span></div>
-        <div className="drawer-list" style={{ marginTop: 14 }}>{familyMembers.map((member) => <div className="member-row" key={member.id}><MemberAvatar member={member} /><div className="item-main"><p className="item-title">{member.profile?.name || 'Anggota keluarga'}</p><p className="item-sub">{member.profile?.email || 'Email tidak tersedia'}</p></div><span className={`role-pill ${member.role}`}>{roleLabel[member.role] || member.role}</span></div>)}</div>
+      {isOwner && (
+        <Card className="role-management-card add-member-card">
+          <div className="row-between">
+            <div>
+              <p className="section-kicker">Role Management</p>
+              <h2>Tambah Anggota</h2>
+            </div>
+            <span className="role-pill owner">Owner</span>
+          </div>
+          <p className="muted tiny role-management-help">Tambahkan anggota yang sudah punya akun menggunakan email atau username. Untuk membuat akun baru langsung dari aplikasi, lanjutkan lewat Edge Function pada tahap berikutnya.</p>
+          <form className="form-grid add-member-form" onSubmit={submitAddMember}>
+            <div className="field">
+              <label>Email atau Username</label>
+              <input
+                value={memberForm.identifier}
+                onChange={(event) => setMemberForm({ ...memberForm, identifier: event.target.value })}
+                placeholder="contoh: anggota@email.com atau username"
+                autoCapitalize="none"
+              />
+            </div>
+            <div className="field">
+              <label>Role</label>
+              <select value={memberForm.role} onChange={(event) => setMemberForm({ ...memberForm, role: event.target.value })}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button className="secondary-btn" type="submit" disabled={addingMember}>
+              <UserPlus size={16} /> {addingMember ? 'Menambahkan...' : 'Tambah Anggota'}
+            </button>
+          </form>
+        </Card>
+      )}
+
+      <Card className="family-members-card role-management-card">
+        <div className="row-between">
+          <div><p className="section-kicker">Daftar Anggota</p><h2>{familyMembers.length} Anggota</h2></div>
+          <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
+        </div>
+
+        {!isOwner && <p className="muted tiny role-management-help">Hanya owner keluarga yang bisa menambahkan anggota, mengubah role, dan menghapus anggota.</p>}
+
+        <div className="drawer-list role-member-list">
+          {familyMembers.map((member) => {
+            const isSelf = member.userId === user?.id;
+            const isLockedOwner = member.role === 'owner';
+            const isProcessing = processingMemberId === member.id;
+            return (
+              <div className={`member-row role-member-row ${isLockedOwner ? 'locked-owner' : ''}`} key={member.id}>
+                <MemberAvatar member={member} />
+                <div className="item-main">
+                  <p className="item-title">{member.profile?.name || 'Anggota keluarga'}</p>
+                  <p className="item-sub">{member.profile?.email || 'Email tidak tersedia'}</p>
+                  {member.profile?.username && <p className="item-sub">@{member.profile.username}</p>}
+                </div>
+
+                <div className="role-member-actions">
+                  <span className={`role-pill ${member.role}`}>{roleLabel[member.role] || member.role}</span>
+
+                  {isOwner && !isSelf && !isLockedOwner && (
+                    <>
+                      <select
+                        className="role-select"
+                        value={roleDrafts[member.id] || member.role}
+                        onChange={(event) => setRoleDrafts((drafts) => ({ ...drafts, [member.id]: event.target.value }))}
+                        disabled={isProcessing}
+                      >
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <div className="role-action-row">
+                        <button className="action-btn edit" type="button" onClick={() => saveMemberRole(member)} disabled={isProcessing}>
+                          <Save size={12} /> Simpan
+                        </button>
+                        <button className="action-btn danger" type="button" onClick={() => removeMember(member)} disabled={isProcessing}>
+                          <Trash2 size={12} /> Hapus
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {isOwner && isSelf && <p className="muted tiny role-note">Akun Anda</p>}
+                  {isLockedOwner && !isSelf && <p className="muted tiny role-note">Owner utama</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </Card>
     </>
   );
