@@ -10,6 +10,7 @@ import './navigation-fix.css';
 import './notifications.css';
 import './settings-menu.css';
 import './auth-soft-login.css';
+import './role-management.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
