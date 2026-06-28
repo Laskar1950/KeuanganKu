@@ -11,7 +11,8 @@ import {
   toSavingGoal,
   toTransaction,
 } from '../lib/mappers.js';
-import { calculateAccountBalance, getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import { calculateAccountBalance, getBudgetUsage } from '../utils/calculations.js';
+import { getBudgetCycle, getBudgetCycleTransactions } from '../utils/budgetCycle.js';
 import { formatRupiah } from '../utils/format.js';
 
 const AppContext = createContext(null);
@@ -48,8 +49,7 @@ function assertOwnerOrAdmin(member) {
 }
 
 function getTransactionCycle(dateString) {
-  const [year, month] = String(dateString || '').split('-').map(Number);
-  return { month, year };
+  return getBudgetCycle(dateString);
 }
 
 function formatCurrency(amount) {
@@ -462,7 +462,7 @@ export function AppProvider({ children }) {
 
     const trxCycle = getTransactionCycle(payload.transactionDate);
     if (budget.month !== trxCycle.month || budget.year !== trxCycle.year) {
-      throw new Error('Alokasi anggaran tidak sesuai dengan bulan transaksi. Pilih alokasi atau tanggal yang sesuai.');
+      throw new Error('Alokasi anggaran tidak sesuai dengan periode gajian transaksi. Periode budget berjalan dari tanggal 25 sampai 24 bulan berikutnya.');
     }
 
     // Penting:
@@ -488,7 +488,7 @@ export function AppProvider({ children }) {
   const getBudgetProjection = (budget, amount, ignoreTransactionId = null) => {
     if (!budget) return { overBudget: false, remainingAfter: 0, overBudgetAmount: 0 };
 
-    const monthTransactions = getMonthTransactions(state.transactions, budget.month, budget.year)
+    const monthTransactions = getBudgetCycleTransactions(state.transactions, budget.month, budget.year)
       .filter((trx) => trx.id !== ignoreTransactionId);
 
     const usage = getBudgetUsage(budget, monthTransactions);
