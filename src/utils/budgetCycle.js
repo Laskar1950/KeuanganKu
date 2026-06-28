@@ -1,61 +1,47 @@
-// Utility siklus budget KeuanganKu.
-// Konsep: budget/alokasi reset setiap tanggal 25.
-// Periode 06/2026 berarti 25 Jun 2026 sampai 24 Jul 2026.
+const SALARY_CYCLE_START_DAY = 25;
 
-export const BUDGET_CYCLE_START_DAY = 25;
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const MONTH_LONG = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
 
-export const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
-  value: index + 1,
-  label: String(index + 1).padStart(2, '0'),
-  name: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(new Date(2026, index, 1)),
-}));
+function toDate(value) {
+  if (value instanceof Date) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
-export const toNumber = (value, fallback = 0) => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-};
+  if (typeof value === 'string') {
+    const [datePart] = value.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
 
-export const pad2 = (value) => String(value).padStart(2, '0');
-
-export const formatDateInput = (date) => {
-  const year = date.getFullYear();
-  const month = pad2(date.getMonth() + 1);
-  const day = pad2(date.getDate());
-  return `${year}-${month}-${day}`;
-};
-
-export const parseDateInput = (value) => {
-  if (value instanceof Date) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-  }
-
-  if (!value) {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  }
-
-  const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
-  if (!year || !month || !day) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    if (year && month && day) {
+      return new Date(year, month - 1, day);
     }
-
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
   }
 
-  return new Date(year, month - 1, day);
-};
+  const parsed = new Date(value || Date.now());
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
 
-export const getMonthName = (month) => {
-  const safeMonth = Math.min(Math.max(toNumber(month, 1), 1), 12);
-  return new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(new Date(2026, safeMonth - 1, 1));
-};
+function toISODate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-export const normalizeBudgetMonthYear = (month, year) => {
-  let normalizedMonth = toNumber(month, new Date().getMonth() + 1);
-  let normalizedYear = toNumber(year, new Date().getFullYear());
+function normalizeMonthYear(month, year) {
+  let normalizedMonth = Number(month);
+  let normalizedYear = Number(year);
 
   while (normalizedMonth < 1) {
     normalizedMonth += 12;
@@ -68,131 +54,173 @@ export const normalizeBudgetMonthYear = (month, year) => {
   }
 
   return { month: normalizedMonth, year: normalizedYear };
-};
+}
 
-export const getBudgetCycleBounds = (month, year, startDay = BUDGET_CYCLE_START_DAY) => {
-  const normalized = normalizeBudgetMonthYear(month, year);
-  const startDateObj = new Date(normalized.year, normalized.month - 1, startDay);
-  const endDateObj = new Date(normalized.year, normalized.month, startDay - 1);
+function buildCycle(month, year) {
+  const normalized = normalizeMonthYear(month, year);
+  const start = new Date(normalized.year, normalized.month - 1, SALARY_CYCLE_START_DAY);
+  const end = new Date(normalized.year, normalized.month, SALARY_CYCLE_START_DAY - 1);
 
   return {
     month: normalized.month,
     year: normalized.year,
-    startDay,
-    startDate: formatDateInput(startDateObj),
-    endDate: formatDateInput(endDateObj),
-    startDateObj,
-    endDateObj,
+    start,
+    end,
+    startDate: toISODate(start),
+    endDate: toISODate(end),
+    startDay: SALARY_CYCLE_START_DAY,
+    endDay: SALARY_CYCLE_START_DAY - 1,
+    label: getBudgetCycleLabel(normalized.month, normalized.year),
+    shortLabel: getBudgetCycleShortLabel(normalized.month, normalized.year),
   };
-};
+}
 
-export const getBudgetCycle = (dateValue = new Date(), startDay = BUDGET_CYCLE_START_DAY) => {
-  const date = parseDateInput(dateValue);
-  let month = date.getMonth() + 1;
-  let year = date.getFullYear();
+function getMonthName(month, variant = 'short') {
+  const index = Number(month) - 1;
+  return variant === 'long' ? MONTH_LONG[index] : MONTH_SHORT[index];
+}
 
-  // Tanggal 1-24 masih masuk siklus bulan sebelumnya.
-  // Contoh: 20 Jul 2026 masuk periode 06/2026 (25 Jun - 24 Jul).
-  if (date.getDate() < startDay) {
-    month -= 1;
-    if (month < 1) {
-      month = 12;
-      year -= 1;
-    }
+/**
+ * Mengembalikan periode budget aktif dari sebuah tanggal.
+ * Aturan:
+ * - Tanggal 25 s/d akhir bulan masuk periode bulan berjalan.
+ * - Tanggal 1 s/d 24 masuk periode bulan sebelumnya.
+ */
+export function getBudgetCyclePeriod(dateValue = new Date()) {
+  const date = toDate(dateValue);
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+
+  if (day >= SALARY_CYCLE_START_DAY) {
+    return buildCycle(month, year);
   }
 
-  return getBudgetCycleBounds(month, year, startDay);
-};
+  const previous = normalizeMonthYear(month - 1, year);
+  return buildCycle(previous.month, previous.year);
+}
 
-export const getCurrentBudgetCycle = (startDay = BUDGET_CYCLE_START_DAY) => {
-  return getBudgetCycle(new Date(), startDay);
-};
+/**
+ * Alias fleksibel agar kompatibel dengan beberapa file patch.
+ * Bisa dipanggil:
+ * - getBudgetCycle('2026-07-01')
+ * - getBudgetCycle(6, 2026)
+ */
+export function getBudgetCycle(input = new Date(), year = null) {
+  if (typeof input === 'number' && year !== null) {
+    return buildCycle(input, year);
+  }
 
-export const isDateInBudgetCycle = (dateValue, month, year, startDay = BUDGET_CYCLE_START_DAY) => {
-  const date = parseDateInput(dateValue);
-  const cycle = getBudgetCycleBounds(month, year, startDay);
-  return date >= cycle.startDateObj && date <= cycle.endDateObj;
-};
+  if (typeof input === 'object' && input?.month && input?.year) {
+    return buildCycle(input.month, input.year);
+  }
 
-export const getBudgetCycleTransactions = (
-  transactions = [],
-  monthOrCycle,
-  year,
-  startDay = BUDGET_CYCLE_START_DAY
-) => {
+  return getBudgetCyclePeriod(input);
+}
+
+/**
+ * Mengembalikan range periode berdasarkan bulan/tahun budget.
+ * Contoh 06/2026 = 2026-06-25 s/d 2026-07-24.
+ */
+export function getBudgetCycleRange(monthOrCycle, year = null) {
+  if (typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year) {
+    return buildCycle(monthOrCycle.month, monthOrCycle.year);
+  }
+
+  return buildCycle(monthOrCycle, year);
+}
+
+export function getBudgetCycleLabel(monthOrCycle, year = null) {
   const cycle =
-    typeof monthOrCycle === 'object' && monthOrCycle !== null
-      ? getBudgetCycleBounds(monthOrCycle.month, monthOrCycle.year, monthOrCycle.startDay || startDay)
-      : getBudgetCycleBounds(monthOrCycle, year, startDay);
+    typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year
+      ? buildCycle(monthOrCycle.month, monthOrCycle.year)
+      : year
+        ? buildCycle(monthOrCycle, year)
+        : null;
 
-  return transactions.filter((transaction) => {
-    const dateValue =
-      transaction?.transactionDate ||
-      transaction?.transaction_date ||
-      transaction?.date ||
-      transaction?.createdAt ||
-      transaction?.created_at;
+  const startMonth = cycle ? cycle.month : Number(monthOrCycle);
+  const startYear = cycle ? cycle.year : Number(year);
+  const endInfo = normalizeMonthYear(startMonth + 1, startYear);
 
-    if (!dateValue) return false;
-    return isDateInBudgetCycle(dateValue, cycle.month, cycle.year, cycle.startDay);
-  });
-};
+  return `25 ${getMonthName(startMonth, 'long')} ${startYear} - 24 ${getMonthName(endInfo.month, 'long')} ${endInfo.year}`;
+}
 
-export const filterBudgetsByCycle = (budgets = [], month, year) => {
-  const normalized = normalizeBudgetMonthYear(month, year);
-  return budgets.filter(
-    (budget) => Number(budget?.month) === normalized.month && Number(budget?.year) === normalized.year
-  );
-};
-
-export const formatShortDate = (dateValue) => {
-  const date = parseDateInput(dateValue);
-  return new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-};
-
-export const formatBudgetCycleRange = (monthOrCycle, year, startDay = BUDGET_CYCLE_START_DAY) => {
+export function getBudgetCycleShortLabel(monthOrCycle, year = null) {
   const cycle =
-    typeof monthOrCycle === 'object' && monthOrCycle !== null
-      ? getBudgetCycleBounds(monthOrCycle.month, monthOrCycle.year, monthOrCycle.startDay || startDay)
-      : getBudgetCycleBounds(monthOrCycle, year, startDay);
+    typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year
+      ? buildCycle(monthOrCycle.month, monthOrCycle.year)
+      : year
+        ? buildCycle(monthOrCycle, year)
+        : null;
 
-  return `${formatShortDate(cycle.startDate)} - ${formatShortDate(cycle.endDate)}`;
-};
+  const startMonth = cycle ? cycle.month : Number(monthOrCycle);
+  const startYear = cycle ? cycle.year : Number(year);
+  const endInfo = normalizeMonthYear(startMonth + 1, startYear);
 
-export const formatBudgetCycleLabel = (monthOrCycle, year) => {
-  const normalized =
-    typeof monthOrCycle === 'object' && monthOrCycle !== null
-      ? normalizeBudgetMonthYear(monthOrCycle.month, monthOrCycle.year)
-      : normalizeBudgetMonthYear(monthOrCycle, year);
+  const sameYear = startYear === endInfo.year;
+  return sameYear
+    ? `25 ${getMonthName(startMonth)} - 24 ${getMonthName(endInfo.month)} ${startYear}`
+    : `25 ${getMonthName(startMonth)} ${startYear} - 24 ${getMonthName(endInfo.month)} ${endInfo.year}`;
+}
 
-  return `${getMonthName(normalized.month)} ${normalized.year}`;
-};
+export function formatBudgetCycleRange(monthOrCycle, year = null) {
+  const cycle =
+    typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year
+      ? buildCycle(monthOrCycle.month, monthOrCycle.year)
+      : year
+        ? buildCycle(monthOrCycle, year)
+        : getBudgetCycle(monthOrCycle || new Date());
 
-export const getPreviousBudgetCycle = (month, year) => {
-  const normalized = normalizeBudgetMonthYear(month - 1, year);
-  return getBudgetCycleBounds(normalized.month, normalized.year);
-};
+  return cycle.shortLabel;
+}
 
-export const getNextBudgetCycle = (month, year) => {
-  const normalized = normalizeBudgetMonthYear(month + 1, year);
-  return getBudgetCycleBounds(normalized.month, normalized.year);
-};
+export function isDateInBudgetCycle(dateValue, monthOrCycle, year = null) {
+  if (!dateValue) return false;
+
+  const date = toDate(dateValue);
+  const cycle =
+    typeof monthOrCycle === 'object' && monthOrCycle?.startDate && monthOrCycle?.endDate
+      ? {
+          start: toDate(monthOrCycle.startDate),
+          end: toDate(monthOrCycle.endDate),
+        }
+      : typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year
+        ? buildCycle(monthOrCycle.month, monthOrCycle.year)
+        : buildCycle(monthOrCycle, year);
+
+  return date >= cycle.start && date <= cycle.end;
+}
+
+export function getBudgetCycleTransactions(transactions = [], monthOrCycle, year = null) {
+  const cycle =
+    typeof monthOrCycle === 'object' && monthOrCycle?.month && monthOrCycle?.year
+      ? buildCycle(monthOrCycle.month, monthOrCycle.year)
+      : buildCycle(monthOrCycle, year);
+
+  return transactions.filter((transaction) => isDateInBudgetCycle(transaction.transactionDate, cycle));
+}
+
+export function getCurrentBudgetCycle() {
+  return getBudgetCyclePeriod(new Date());
+}
+
+export function getBudgetCycleOptionFromDate(dateValue = new Date()) {
+  const cycle = getBudgetCyclePeriod(dateValue);
+  return { month: cycle.month, year: cycle.year };
+}
+
+export { SALARY_CYCLE_START_DAY };
 
 export default {
-  BUDGET_CYCLE_START_DAY,
-  MONTH_OPTIONS,
+  SALARY_CYCLE_START_DAY,
   getBudgetCycle,
-  getCurrentBudgetCycle,
-  getBudgetCycleBounds,
   getBudgetCycleTransactions,
-  isDateInBudgetCycle,
-  filterBudgetsByCycle,
+  getBudgetCyclePeriod,
+  getBudgetCycleRange,
+  getBudgetCycleLabel,
+  getBudgetCycleShortLabel,
   formatBudgetCycleRange,
-  formatBudgetCycleLabel,
-  getPreviousBudgetCycle,
-  getNextBudgetCycle,
+  isDateInBudgetCycle,
+  getCurrentBudgetCycle,
+  getBudgetCycleOptionFromDate,
 };
