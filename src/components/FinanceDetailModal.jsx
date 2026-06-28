@@ -2,11 +2,11 @@ import React, { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, CreditCard, PiggyBank, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 import { formatRupiah } from '../utils/format.js';
-import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import { getBudgetUsage } from '../utils/calculations.js';
+import { getBudgetCycleTransactions, isDateInBudgetCycle, formatBudgetCycleRange } from '../utils/budgetCycle.js';
 
 function sameCycle(transaction, month, year) {
-  const [trxYear, trxMonth] = String(transaction.transactionDate || '').split('-').map(Number);
-  return Number(trxMonth) === Number(month) && Number(trxYear) === Number(year);
+  return isDateInBudgetCycle(transaction.transactionDate, month, year);
 }
 
 function totalByType(transactions, type) {
@@ -73,13 +73,13 @@ export default function FinanceDetailModal({ open, type, item, transactions = []
       .filter((trx) => trx.budgetId === item.id)
       .sort((a, b) => String(b.transactionDate).localeCompare(String(a.transactionDate)) || String(b.createdAt).localeCompare(String(a.createdAt)));
     const sourceAccount = accountBalances.find((account) => account.id === item.accountId);
-    const sameMonthTransactions = getMonthTransactions(transactions, item.month, item.year);
+    const sameMonthTransactions = getBudgetCycleTransactions(transactions, item.month, item.year);
     const sourceIncome = sameMonthTransactions.filter((trx) => trx.type === 'income' && trx.accountId === item.accountId);
     const usage = getBudgetUsage(item, sameMonthTransactions);
 
     return {
       title: item.name,
-      subtitle: `${String(item.month).padStart(2, '0')}/${item.year} • ${sourceAccount?.name || 'Dompet tidak ditemukan'}`,
+      subtitle: `${formatBudgetCycleRange(item.month, item.year)} • ${sourceAccount?.name || 'Dompet tidak ditemukan'}`,
       income: totalByType(sourceIncome, 'income'),
       expense: totalByType(budgetTransactions, 'expense'),
       transactions: [...budgetTransactions],
@@ -133,8 +133,8 @@ export default function FinanceDetailModal({ open, type, item, transactions = []
               ) : (
                 <div className="finance-detail-summary-card neutral">
                   <span><PiggyBank size={16} /></span>
-                  <small>{Number(data.usage?.remaining || 0) < 0 ? 'Over budget' : 'Sisa alokasi'}</small>
-                  <strong className={Number(data.usage?.remaining || 0) < 0 ? 'danger-text' : ''}>{Number(data.usage?.remaining || 0) < 0 ? formatRupiah(Math.abs(data.usage?.remaining || 0)) : formatRupiah(data.usage?.remaining || 0)}</strong>
+                  <small>Sisa alokasi</small>
+                  <strong>{formatRupiah(data.usage?.remaining || 0)}</strong>
                 </div>
               )}
             </div>
@@ -148,19 +148,17 @@ export default function FinanceDetailModal({ open, type, item, transactions = []
                 {data.relatedBudgets.length ? (
                   <div className="finance-detail-budget-list">
                     {data.relatedBudgets.map((budget) => {
-                      const usage = getBudgetUsage(budget, getMonthTransactions(transactions, budget.month, budget.year));
-                      const progressRaw = budget.amount > 0 ? Math.round((usage.used / budget.amount) * 100) : 0;
-                      const progress = Math.min(100, progressRaw);
-                      const overBudget = Number(usage.remaining || 0) < 0;
+                      const usage = getBudgetUsage(budget, getBudgetCycleTransactions(transactions, budget.month, budget.year));
+                      const progress = budget.amount > 0 ? Math.min(100, Math.round((usage.used / budget.amount) * 100)) : 0;
                       return (
-                        <div className={`finance-detail-budget-card ${overBudget ? 'over-budget' : ''}`} key={budget.id}>
+                        <div className="finance-detail-budget-card" key={budget.id}>
                           <div>
                             <strong>{budget.name}</strong>
                             <small><CalendarDays size={12} /> {String(budget.month).padStart(2, '0')}/{budget.year}</small>
                           </div>
                           <div>
-                            <strong className={overBudget ? 'danger-text' : ''}>{overBudget ? formatRupiah(Math.abs(usage.remaining)) : formatRupiah(usage.remaining)}</strong>
-                            <small>{overBudget ? 'Over budget dari' : 'Sisa dari'} {formatRupiah(budget.amount)}</small>
+                            <strong>{formatRupiah(usage.remaining)}</strong>
+                            <small>Sisa dari {formatRupiah(budget.amount)}</small>
                           </div>
                           <span className="finance-detail-progress"><i style={{ width: `${progress}%` }} /></span>
                         </div>
