@@ -12,6 +12,7 @@ import {
   toTransaction,
 } from '../lib/mappers.js';
 import { calculateAccountBalance, getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import { formatRupiah } from '../utils/format.js';
 
 const AppContext = createContext(null);
 
@@ -37,6 +38,12 @@ function requireSupabaseEnv() {
 function assertOwner(member) {
   if (member?.role !== 'owner') {
     throw new Error('Aksi ini hanya bisa dilakukan oleh owner keluarga.');
+  }
+}
+
+function assertOwnerOrAdmin(member) {
+  if (!['owner', 'admin'].includes(member?.role)) {
+    throw new Error('Aksi ini hanya bisa dilakukan oleh owner atau admin keluarga.');
   }
 }
 
@@ -130,7 +137,7 @@ export function AppProvider({ children }) {
       const [membersRes, categoriesRes, accountsRes, transactionsRes, budgetsRes, goalsRes] = await Promise.all([
         supabase
           .from('family_members')
-          .select('*, profiles(id, name, email, avatar_url, created_at)')
+          .select('*, profiles(id, name, username, email, avatar_url, created_at)')
           .eq('family_id', household.id)
           .order('created_at', { ascending: true }),
 
@@ -149,7 +156,7 @@ export function AppProvider({ children }) {
 
         supabase
           .from('transactions')
-          .select('*, profiles(id, name, email, avatar_url, created_at)')
+          .select('*, profiles(id, name, username, email, avatar_url, created_at)')
           .eq('family_id', household.id)
           .order('transaction_date', { ascending: false })
           .order('created_at', { ascending: false }),
@@ -320,16 +327,39 @@ export function AppProvider({ children }) {
     if (error) console.warn('Mark all notifications read skipped:', error.message);
   };
 
-  const register = async ({ name, email, password }) => {
+  const register = async ({ name, username, email, password }) => {
     requireSupabaseEnv();
 
     if (!name || !email || !password) throw new Error('Nama, email, dan password wajib diisi.');
     if (password.length < 6) throw new Error('Password minimal 6 karakter.');
 
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+    const cleanUsername = (username || email.split('@')[0] || 'pengguna')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          username: cleanUsername || 'pengguna',
+        },
+      },
+    });
     if (error) throw error;
 
-    if (data.user) await supabase.from('profiles').upsert({ id: data.user.id, name, email });
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        name,
+        username: cleanUsername || 'pengguna',
+        email,
+      });
+    }
+
     notify('Registrasi berhasil. Silakan login atau cek email jika konfirmasi email aktif.');
   };
 
@@ -369,6 +399,7 @@ export function AppProvider({ children }) {
     const { error: profileError } = await supabase.from('profiles').upsert({
       id: authUser.id,
       name: state.user?.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Pengguna',
+      username: state.user?.username || authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'pengguna',
       email: authUser.email,
     });
     if (profileError) throw profileError;
@@ -421,7 +452,7 @@ export function AppProvider({ children }) {
     notify('Kode undangan keluarga berhasil disalin.');
   };
 
-  const getAllocationForTransaction = (payload, ignoreTransactionId = null) => {
+  const getAllocationForTransaction = (payload) => {
     if (payload.type !== 'expense') return null;
     if (!payload.budgetId) throw new Error('Pengeluaran wajib memilih alokasi anggaran.');
 
@@ -434,30 +465,67 @@ export function AppProvider({ children }) {
       throw new Error('Alokasi anggaran tidak sesuai dengan bulan transaksi. Pilih alokasi atau tanggal yang sesuai.');
     }
 
+    // Penting:
+    // Alokasi anggaran boleh menjadi minus/over budget.
+    // Batas validasi transaksi pengeluaran adalah saldo dompet sumber, bukan sisa alokasi.
+    return budget;
+  };
+
+  const getAccountBalanceForValidation = (accountId, ignoreTransactionId = null) => {
+    const account = state.accounts.find((item) => item.id === accountId);
+    if (!account) throw new Error('Akun/dompet tidak ditemukan. Pilih ulang dompet atau alokasi.');
+
+    const transactionsForBalance = ignoreTransactionId
+      ? state.transactions.filter((trx) => trx.id !== ignoreTransactionId)
+      : state.transactions;
+
+    return {
+      account,
+      balance: calculateAccountBalance(account, transactionsForBalance),
+    };
+  };
+
+  const getBudgetProjection = (budget, amount, ignoreTransactionId = null) => {
+    if (!budget) return { overBudget: false, remainingAfter: 0, overBudgetAmount: 0 };
+
     const monthTransactions = getMonthTransactions(state.transactions, budget.month, budget.year)
       .filter((trx) => trx.id !== ignoreTransactionId);
-    const usage = getBudgetUsage(budget, monthTransactions);
-    const remaining = Number(usage.remaining || 0);
-    const amount = Number(payload.amount || 0);
 
-    if (amount > remaining) {
-      throw new Error(`Nominal melebihi sisa alokasi. Sisa alokasi saat ini Rp${remaining.toLocaleString('id-ID')}.`);
+    const usage = getBudgetUsage(budget, monthTransactions);
+    const remainingAfter = Number(usage.remaining || 0) - Number(amount || 0);
+
+    return {
+      overBudget: remainingAfter < 0,
+      remainingAfter,
+      overBudgetAmount: Math.abs(Math.min(remainingAfter, 0)),
+    };
+  };
+
+  const validateExpenseSourceBalance = ({ accountId, amount, ignoreTransactionId = null }) => {
+    const { account, balance } = getAccountBalanceForValidation(accountId, ignoreTransactionId);
+    const nominal = Number(amount || 0);
+
+    if (nominal > Number(balance || 0)) {
+      throw new Error(`Saldo dompet ${account.name} tidak cukup. Saldo saat ini ${formatCurrency(balance)}.`);
     }
 
-    return budget;
+    return { account, balance };
   };
 
   const addTransaction = async (payload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
     if (!payload.transactionDate) throw new Error('Tanggal transaksi wajib dipilih.');
 
-    const budget = getAllocationForTransaction(payload);
     const isExpense = payload.type === 'expense';
+    const budget = getAllocationForTransaction(payload);
     const accountId = isExpense ? budget.accountId : payload.accountId;
     const categoryId = isExpense ? null : payload.categoryId;
 
     if (!accountId) throw new Error('Akun/dompet wajib dipilih.');
     if (!isExpense && !categoryId) throw new Error('Kategori pemasukan wajib dipilih.');
+
+    const projection = isExpense ? getBudgetProjection(budget, payload.amount) : null;
+    if (isExpense) validateExpenseSourceBalance({ accountId, amount: payload.amount });
 
     const { error } = await supabase.from('transactions').insert({
       family_id: state.household.id,
@@ -475,11 +543,17 @@ export function AppProvider({ children }) {
     await createNotification({
       type: 'transaction',
       title: isExpense ? 'Pengeluaran baru dicatat' : 'Pemasukan baru dicatat',
-      message: `${state.user?.name || 'Anggota keluarga'} mencatat ${isExpense ? 'pengeluaran' : 'pemasukan'} ${formatCurrency(payload.amount)}${isExpense && budget?.name ? ` dari alokasi ${budget.name}` : ''}.`,
+      message: `${state.user?.name || 'Anggota keluarga'} mencatat ${isExpense ? 'pengeluaran' : 'pemasukan'} ${formatCurrency(payload.amount)}${isExpense && budget?.name ? ` dari alokasi ${budget.name}` : ''}${projection?.overBudget ? ` dan membuat over budget ${formatCurrency(projection.overBudgetAmount)}` : ''}.`,
       target: 'transactions',
     });
 
-    notify(isExpense ? 'Pengeluaran berhasil disimpan, alokasi dan saldo dompet otomatis berkurang.' : 'Transaksi berhasil disimpan.');
+    notify(
+      isExpense && projection?.overBudget
+        ? `Pengeluaran berhasil disimpan sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
+        : isExpense
+          ? 'Pengeluaran berhasil disimpan. Saldo dompet otomatis berkurang.'
+          : 'Transaksi berhasil disimpan.'
+    );
     await refreshData();
   };
 
@@ -487,13 +561,16 @@ export function AppProvider({ children }) {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
     if (!payload.transactionDate) throw new Error('Tanggal transaksi wajib dipilih.');
 
-    const budget = getAllocationForTransaction(payload, id);
     const isExpense = payload.type === 'expense';
+    const budget = getAllocationForTransaction(payload);
     const accountId = isExpense ? budget.accountId : payload.accountId;
     const categoryId = isExpense ? null : payload.categoryId;
 
     if (!accountId) throw new Error('Akun/dompet wajib dipilih.');
     if (!isExpense && !categoryId) throw new Error('Kategori pemasukan wajib dipilih.');
+
+    const projection = isExpense ? getBudgetProjection(budget, payload.amount, id) : null;
+    if (isExpense) validateExpenseSourceBalance({ accountId, amount: payload.amount, ignoreTransactionId: id });
 
     const { error } = await supabase
       .from('transactions')
@@ -512,11 +589,17 @@ export function AppProvider({ children }) {
     await createNotification({
       type: 'transaction',
       title: 'Transaksi diperbarui',
-      message: `${state.user?.name || 'Anggota keluarga'} memperbarui transaksi ${formatCurrency(payload.amount)}.`,
+      message: `${state.user?.name || 'Anggota keluarga'} memperbarui transaksi ${formatCurrency(payload.amount)}${projection?.overBudget ? ` dan alokasi menjadi over budget ${formatCurrency(projection.overBudgetAmount)}` : ''}.`,
       target: 'transactions',
     });
 
-    notify(isExpense ? 'Pengeluaran berhasil diperbarui, alokasi dan saldo dompet ikut disesuaikan.' : 'Transaksi berhasil diperbarui.');
+    notify(
+      isExpense && projection?.overBudget
+        ? `Pengeluaran berhasil diperbarui sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
+        : isExpense
+          ? 'Pengeluaran berhasil diperbarui. Saldo dompet ikut disesuaikan.'
+          : 'Transaksi berhasil diperbarui.'
+    );
     await refreshData();
   };
 
@@ -539,8 +622,78 @@ export function AppProvider({ children }) {
     return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
   }, [state.familyMembers, state.user?.id]);
 
+  const addFamilyMemberByIdentifier = async ({ identifier, role = 'member' }) => {
+    assertOwnerOrAdmin(currentMember);
+    if (!identifier?.trim()) throw new Error('Email atau username anggota wajib diisi.');
+
+    const effectiveRole = currentMember?.role === 'admin' ? 'member' : role;
+    if (!['admin', 'member'].includes(effectiveRole)) {
+      throw new Error('Role anggota hanya boleh admin atau member.');
+    }
+
+    const { error } = await supabase.rpc('add_family_member_by_identifier', {
+      p_identifier: identifier.trim(),
+      p_role: effectiveRole,
+    });
+    if (error) throw error;
+
+    await createNotification({
+      type: 'member',
+      title: 'Anggota keluarga ditambahkan',
+      message: `${state.user?.name || 'Owner/Admin'} menambahkan anggota baru sebagai ${effectiveRole}.`,
+      target: 'settings',
+    });
+
+    notify('Anggota keluarga berhasil ditambahkan.');
+    await refreshData();
+  };
+
+  const updateFamilyMemberRole = async (memberId, role) => {
+    assertOwnerOrAdmin(currentMember);
+    if (!memberId) throw new Error('Anggota belum dipilih.');
+    if (!['admin', 'member'].includes(role)) throw new Error('Role hanya boleh admin atau member.');
+
+    const targetMember = state.familyMembers.find((member) => member.id === memberId);
+    if (!targetMember) throw new Error('Anggota tidak ditemukan.');
+    if (targetMember.userId === state.user?.id) throw new Error('Anda tidak bisa mengubah role diri sendiri.');
+    if (targetMember.role === 'owner') throw new Error('Role owner tidak bisa diubah dari menu ini.');
+
+    if (currentMember?.role === 'admin') {
+      if (targetMember.role !== 'member') throw new Error('Admin hanya bisa mengelola anggota dengan role member.');
+      if (role !== 'member') throw new Error('Admin tidak bisa mengangkat anggota menjadi admin.');
+    }
+
+    const { error } = await supabase.rpc('update_family_member_role', {
+      p_member_id: memberId,
+      p_role: role,
+    });
+    if (error) throw error;
+
+    notify('Role anggota berhasil diperbarui.');
+    await refreshData();
+  };
+
+  const removeFamilyMember = async (memberId) => {
+    assertOwnerOrAdmin(currentMember);
+    if (!memberId) throw new Error('Anggota belum dipilih.');
+
+    const targetMember = state.familyMembers.find((member) => member.id === memberId);
+    if (!targetMember) throw new Error('Anggota tidak ditemukan.');
+    if (targetMember.userId === state.user?.id) throw new Error('Anda tidak bisa menghapus diri sendiri dari keluarga.');
+    if (targetMember.role === 'owner') throw new Error('Owner tidak bisa dihapus dari menu ini.');
+    if (currentMember?.role === 'admin' && targetMember.role !== 'member') {
+      throw new Error('Admin hanya bisa menghapus anggota dengan role member.');
+    }
+
+    const { error } = await supabase.rpc('remove_family_member', { p_member_id: memberId });
+    if (error) throw error;
+
+    notify('Anggota berhasil dihapus dari keluarga.');
+    await refreshData();
+  };
+
   const addAccount = async (payload) => {
-    assertOwner(currentMember);
+    assertOwnerOrAdmin(currentMember);
     if (!payload.name) throw new Error('Nama akun/dompet wajib diisi.');
 
     const { error } = await supabase.from('accounts').insert({
@@ -555,7 +708,7 @@ export function AppProvider({ children }) {
     await createNotification({
       type: 'account',
       title: 'Dompet baru ditambahkan',
-      message: `${state.user?.name || 'Owner'} menambahkan dompet ${payload.name}.`,
+      message: `${state.user?.name || 'Owner/Admin'} menambahkan dompet ${payload.name}.`,
       target: 'settings',
     });
 
@@ -564,7 +717,7 @@ export function AppProvider({ children }) {
   };
 
   const updateAccount = async (id, payload) => {
-    assertOwner(currentMember);
+    assertOwnerOrAdmin(currentMember);
     if (!payload.name) throw new Error('Nama akun/dompet wajib diisi.');
 
     const { error } = await supabase
@@ -579,7 +732,7 @@ export function AppProvider({ children }) {
   };
 
   const toggleAccount = async (id) => {
-    assertOwner(currentMember);
+    assertOwnerOrAdmin(currentMember);
     const account = state.accounts.find((item) => item.id === id);
 
     const { error } = await supabase
@@ -590,6 +743,29 @@ export function AppProvider({ children }) {
     if (error) throw error;
 
     notify('Status akun/dompet diperbarui.');
+    await refreshData();
+  };
+
+  const deleteAccount = async (id) => {
+    assertOwnerOrAdmin(currentMember);
+    const account = state.accounts.find((item) => item.id === id);
+    if (!account) throw new Error('Dompet tidak ditemukan.');
+
+    const relatedTransactions = state.transactions.filter((trx) => trx.accountId === id);
+    const relatedBudgets = state.budgets.filter((budget) => budget.accountId === id);
+
+    if (relatedTransactions.length || relatedBudgets.length) {
+      throw new Error('Dompet ini sudah memiliki transaksi atau alokasi. Nonaktifkan dompet agar histori tetap aman.');
+    }
+
+    const { error } = await supabase
+      .from('accounts')
+      .delete()
+      .eq('id', id)
+      .eq('family_id', state.household.id);
+    if (error) throw error;
+
+    notify('Dompet berhasil dihapus.');
     await refreshData();
   };
 
@@ -671,8 +847,56 @@ export function AppProvider({ children }) {
     await refreshData();
   };
 
+  const updateBudget = async (id, payload) => {
+    if (!id) throw new Error('Alokasi belum dipilih.');
+    if (!payload.name?.trim()) throw new Error('Nama alokasi wajib diisi.');
+    if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal alokasi wajib lebih besar dari 0.');
+    if (!payload.accountId) throw new Error('Sumber anggaran/dompet wajib dipilih.');
+
+    const account = state.accounts.find((item) => item.id === payload.accountId && item.isActive);
+    if (!account) throw new Error('Sumber anggaran/dompet tidak aktif atau tidak ditemukan.');
+
+    const duplicate = state.budgets.find((budget) =>
+      budget.id !== id &&
+      budget.name?.trim().toLowerCase() === payload.name.trim().toLowerCase() &&
+      budget.month === Number(payload.month) &&
+      budget.year === Number(payload.year)
+    );
+    if (duplicate) throw new Error('Nama alokasi ini sudah digunakan untuk bulan tersebut.');
+
+    const { error } = await supabase
+      .from('budgets')
+      .update({
+        name: payload.name.trim(),
+        account_id: payload.accountId,
+        category_id: null,
+        month: Number(payload.month),
+        year: Number(payload.year),
+        amount: Number(payload.amount),
+        note: payload.note || null,
+      })
+      .eq('id', id)
+      .eq('family_id', state.household.id);
+    if (error) throw error;
+
+    await createNotification({
+      type: 'budget',
+      title: 'Alokasi diperbarui',
+      message: `${state.user?.name || 'Anggota keluarga'} memperbarui alokasi ${payload.name}.`,
+      target: 'budgets',
+    });
+
+    notify('Alokasi anggaran berhasil diperbarui.');
+    await refreshData();
+  };
+
   const deleteBudget = async (id) => {
-    const { error } = await supabase.from('budgets').delete().eq('id', id);
+    const usedByTransactions = state.transactions.some((trx) => trx.budgetId === id);
+    if (usedByTransactions) {
+      throw new Error('Alokasi ini sudah dipakai transaksi. Untuk menjaga histori, sebaiknya edit nominal/catatan atau buat alokasi baru.');
+    }
+
+    const { error } = await supabase.from('budgets').delete().eq('id', id).eq('family_id', state.household.id);
     if (error) throw error;
 
     await createNotification({
@@ -769,12 +993,17 @@ export function AppProvider({ children }) {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    addFamilyMemberByIdentifier,
+    updateFamilyMemberRole,
+    removeFamilyMember,
     addAccount,
     updateAccount,
     toggleAccount,
+    deleteAccount,
     addCategory,
     deleteCategory,
     addBudget,
+    updateBudget,
     deleteBudget,
     addSavingGoal,
     depositSavingGoal,
