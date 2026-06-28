@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, Eye, EyeOff, PiggyBank, Plus, Wallet } from 'lucide-react';
+import { Bell, Eye, EyeOff, PiggyBank, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { formatRupiah } from '../utils/format.js';
@@ -44,7 +44,7 @@ function formatDateTime(value) {
   }).format(date);
 }
 
-export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickAdd }) {
+export default function Dashboard({ goTo, onNavigate }) {
   const {
     user,
     household,
@@ -62,7 +62,6 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
   const [showNotifications, setShowNotifications] = useState(false);
 
   const navigate = goTo || onNavigate;
-  const quickAdd = onAddTransaction || onQuickAdd;
 
   const currentMonthTransactions = useMemo(() => getMonthTransactions(transactions, monthNow(), yearNow()), [transactions]);
   const currentBudgets = useMemo(() => budgets.filter((budget) => Number(budget.month) === monthNow() && Number(budget.year) === yearNow()), [budgets]);
@@ -135,10 +134,21 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
       )}
 
       <section className="playful-balance-card dashboard-gradient-balance-card">
-        <div className="playful-balance-top">
+        <div className="playful-balance-top" style={{ alignItems: 'flex-start' }}>
           <div>
             <p>Total Saldo Keluarga</p>
-            <span>{accountBalances.length} dompet aktif/terdaftar</span>
+            <strong
+              className="playful-balance-amount"
+              style={{
+                display: 'block',
+                margin: '10px 0 0',
+                fontSize: 'clamp(30px, 8vw, 39px)',
+                lineHeight: 1,
+                letterSpacing: '-0.06em',
+              }}
+            >
+              {showBalance ? formatRupiah(totalBalance) : 'Rp••••••••'}
+            </strong>
           </div>
           <button className="balance-toggle-btn" type="button" onClick={() => setShowBalance((value) => !value)}>
             {showBalance ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -146,9 +156,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
           </button>
         </div>
 
-        <strong className="playful-balance-amount">{showBalance ? formatRupiah(totalBalance) : 'Rp••••••••'}</strong>
-
-        <div className="playful-balance-metrics">
+        <div className="playful-balance-metrics" style={{ marginTop: 18 }}>
           <div>
             <span>Pemasukan bulan ini</span>
             <strong>{formatRupiah(monthlyIncome)}</strong>
@@ -158,10 +166,6 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
             <strong>{formatRupiah(monthlyExpense)}</strong>
           </div>
         </div>
-
-        <button className="primary-btn playful-primary-btn" type="button" onClick={quickAdd} style={{ marginTop: 14, position: 'relative', zIndex: 1 }}>
-          <Plus size={16} /> Catat Transaksi
-        </button>
       </section>
 
       <section>
