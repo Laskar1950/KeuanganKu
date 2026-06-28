@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { PlusCircle, X } from 'lucide-react';
+import { Check, PlusCircle, Search, Wallet, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { formatRupiah } from '../utils/format.js';
 import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
@@ -22,6 +22,125 @@ const emptyForm = () => ({
   note: '',
 });
 
+function normalizeText(value = '') {
+  return String(value).toLowerCase().trim();
+}
+
+function AllocationPickerModal({
+  open,
+  budgets,
+  transactions,
+  accountBalances,
+  selectedBudgetId,
+  selectedTransactionId,
+  onSelect,
+  onClose,
+  search,
+  setSearch,
+  cycle,
+}) {
+  const filteredBudgets = useMemo(() => {
+    const keyword = normalizeText(search);
+    if (!keyword) return budgets;
+
+    return budgets.filter((budget) => {
+      const account = accountBalances.find((item) => item.id === budget.accountId);
+      return [budget.name, budget.note, account?.name]
+        .some((value) => normalizeText(value).includes(keyword));
+    });
+  }, [accountBalances, budgets, search]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="allocation-picker-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.section
+            className="allocation-picker-sheet"
+            initial={{ y: 420, opacity: 0.98 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 420, opacity: 0.98 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="allocation-picker-header">
+              <div>
+                <p className="section-kicker">Pilih alokasi</p>
+                <h3>Alokasi periode {String(cycle.month || '').padStart(2, '0')}/{cycle.year || '-'}</h3>
+                <small>{budgets.length} alokasi tersedia sesuai tanggal transaksi.</small>
+              </div>
+              <button type="button" className="icon-btn" onClick={onClose} aria-label="Tutup pilihan alokasi">
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="allocation-search-box">
+              <Search size={17} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cari nama alokasi atau dompet..."
+                autoFocus
+              />
+            </label>
+
+            <div className="allocation-picker-list">
+              {filteredBudgets.length ? filteredBudgets.map((budget) => {
+                const account = accountBalances.find((item) => item.id === budget.accountId);
+                const usage = getBudgetUsage(
+                  budget,
+                  transactions.filter((trx) => trx.id !== selectedTransactionId)
+                );
+                const rawProgress = budget.amount > 0 ? Math.round((usage.used / budget.amount) * 100) : 0;
+                const progress = Math.min(100, rawProgress);
+                const overBudget = Number(usage.remaining || 0) < 0;
+                const isSelected = selectedBudgetId === budget.id;
+
+                return (
+                  <button
+                    type="button"
+                    className={`allocation-option-card ${isSelected ? 'selected' : ''} ${overBudget ? 'over-budget' : ''}`}
+                    key={budget.id}
+                    onClick={() => onSelect(budget.id)}
+                  >
+                    <span className="allocation-option-check">
+                      {isSelected ? <Check size={16} /> : null}
+                    </span>
+                    <span className="allocation-option-main">
+                      <strong>{budget.name}</strong>
+                      <span className="allocation-option-meta">
+                        <Wallet size={14} /> {account?.name || 'Dompet tidak ditemukan'}
+                      </span>
+                      {budget.note ? <small>{budget.note}</small> : null}
+                      <span className="allocation-option-progress"><i style={{ width: `${progress}%` }} /></span>
+                    </span>
+                    <span className="allocation-option-amounts">
+                      <em>{overBudget ? 'Over budget' : 'Sisa'}</em>
+                      <strong className={overBudget ? 'danger' : ''}>{overBudget ? formatRupiah(Math.abs(usage.remaining)) : formatRupiah(usage.remaining)}</strong>
+                      <small>Dipakai {formatRupiah(usage.used)} dari {formatRupiah(budget.amount)}</small>
+                      {overBudget ? <small className="allocation-over-note">Tetap bisa dipakai jika saldo dompet cukup</small> : null}
+                    </span>
+                  </button>
+                );
+              }) : (
+                <div className="allocation-empty-state">
+                  <strong>Alokasi tidak ditemukan.</strong>
+                  <p>Coba ubah kata pencarian atau cek tanggal transaksi agar sesuai dengan bulan alokasi.</p>
+                </div>
+              )}
+            </div>
+          </motion.section>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 export default function TransactionSheet({ open, onClose, editingTransaction = null, onClearEdit }) {
   const {
     categories,
@@ -39,6 +158,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [quickCategoryName, setQuickCategoryName] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
+  const [allocationPickerOpen, setAllocationPickerOpen] = useState(false);
+  const [allocationSearch, setAllocationSearch] = useState('');
 
   React.useEffect(() => {
     if (editingTransaction) {
@@ -56,6 +177,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     }
     setShowCategoryForm(false);
     setQuickCategoryName('');
+    setAllocationPickerOpen(false);
+    setAllocationSearch('');
   }, [editingTransaction, open]);
 
   const isOwner = currentMember?.role === 'owner';
@@ -72,8 +195,14 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
   const availableBudgets = useMemo(() => {
     if (form.type !== 'expense') return [];
-    return budgets.filter((budget) => budget.month === cycle.month && budget.year === cycle.year);
-  }, [budgets, cycle.month, cycle.year, form.type]);
+    return budgets
+      .filter((budget) => Number(budget.month) === Number(cycle.month) && Number(budget.year) === Number(cycle.year))
+      .sort((a, b) => {
+        const accountA = accountBalances.find((item) => item.id === a.accountId)?.name || '';
+        const accountB = accountBalances.find((item) => item.id === b.accountId)?.name || '';
+        return accountA.localeCompare(accountB, 'id') || a.name.localeCompare(b.name, 'id');
+      });
+  }, [accountBalances, budgets, cycle.month, cycle.year, form.type]);
 
   React.useEffect(() => {
     if (form.type !== 'expense') {
@@ -91,9 +220,16 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const selectedBudgetUsage = selectedBudget ? getBudgetUsage(selectedBudget, monthTransactions) : null;
   const selectedBudgetAccount = selectedBudget ? accountBalances.find((account) => account.id === selectedBudget.accountId) : null;
   const projectedRemaining = selectedBudgetUsage ? selectedBudgetUsage.remaining - Number(form.amount || 0) : null;
+  const selectedBudgetIsOver = selectedBudgetUsage ? Number(selectedBudgetUsage.remaining || 0) < 0 : false;
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
   const setType = (type) => setForm((prev) => ({ ...prev, type, categoryId: '', budgetId: '', accountId: '' }));
+
+  const selectBudget = (budgetId) => {
+    setField('budgetId', budgetId);
+    setAllocationPickerOpen(false);
+    setAllocationSearch('');
+  };
 
   const submitQuickCategory = async (event) => {
     event.preventDefault();
@@ -115,9 +251,25 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     event.preventDefault();
     try {
       const isExpense = form.type === 'expense';
+      const amount = Number(form.amount || 0);
+      if (isExpense) {
+        if (!selectedBudget) throw new Error('Pengeluaran wajib memilih alokasi anggaran.');
+        const previousExpenseImpact = editingTransaction?.type === 'expense' && editingTransaction.accountId === selectedBudget.accountId
+          ? Number(editingTransaction.amount || 0)
+          : 0;
+        const availableBalance = Number(selectedBudgetAccount?.currentBalance || 0) + previousExpenseImpact;
+        if (availableBalance < amount) {
+          throw new Error(`Saldo dompet ${selectedBudgetAccount?.name || 'sumber'} tidak mencukupi. Saldo tersedia ${formatRupiah(availableBalance)}.`);
+        }
+        if (projectedRemaining < 0) {
+          const confirmed = window.confirm(`Transaksi ini akan membuat alokasi "${selectedBudget.name}" over budget sebesar ${formatRupiah(Math.abs(projectedRemaining))}. Tetap simpan pengeluaran?`);
+          if (!confirmed) return;
+        }
+      }
+
       const payload = {
         ...form,
-        amount: Number(form.amount),
+        amount,
         categoryId: isExpense ? null : form.categoryId || incomeCategories[0]?.id,
         accountId: isExpense ? selectedBudget?.accountId || '' : form.accountId || accountBalances.find((account) => account.isActive)?.id,
         budgetId: isExpense ? form.budgetId || null : null,
@@ -158,22 +310,52 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
             </div>
 
             {form.type === 'expense' ? (
-              <div className="field allocation-field">
+              <div className="field allocation-field allocation-picker-field">
                 <label>Alokasi Anggaran</label>
-                <select value={form.budgetId} onChange={(e) => setField('budgetId', e.target.value)}>
-                  <option value="">Pilih alokasi</option>
-                  {availableBudgets.map((budget) => {
-                    const usage = getBudgetUsage(budget, monthTransactions);
-                    const account = accountBalances.find((item) => item.id === budget.accountId);
-                    return <option value={budget.id} key={budget.id}>{budget.name} • {account?.name || 'Dompet'} • Sisa {formatRupiah(usage.remaining)}</option>;
-                  })}
-                </select>
+                <button
+                  type="button"
+                  className={`allocation-select-button ${selectedBudget ? 'selected' : ''}`}
+                  onClick={() => setAllocationPickerOpen(true)}
+                >
+                  {selectedBudget ? (
+                    <>
+                      <span>
+                        <strong>{selectedBudget.name}</strong>
+                        <small>{selectedBudgetAccount?.name || 'Dompet tidak ditemukan'}</small>
+                      </span>
+                      <em className={selectedBudgetIsOver ? 'danger' : ''}>{selectedBudgetIsOver ? `Over ${formatRupiah(Math.abs(selectedBudgetUsage?.remaining || 0))}` : `${formatRupiah(selectedBudgetUsage?.remaining || 0)} tersisa`}</em>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        <strong>Pilih alokasi</strong>
+                        <small>{availableBudgets.length} alokasi tersedia untuk periode ini</small>
+                      </span>
+                      <em>Pilih</em>
+                    </>
+                  )}
+                </button>
+
+                <AllocationPickerModal
+                  open={allocationPickerOpen}
+                  budgets={availableBudgets}
+                  transactions={monthTransactions}
+                  accountBalances={accountBalances}
+                  selectedBudgetId={form.budgetId}
+                  selectedTransactionId={editingTransaction?.id}
+                  onSelect={selectBudget}
+                  onClose={() => setAllocationPickerOpen(false)}
+                  search={allocationSearch}
+                  setSearch={setAllocationSearch}
+                  cycle={cycle}
+                />
+
                 {selectedBudgetUsage ? (
                   <p className={`budget-hint ${projectedRemaining < 0 ? 'danger' : ''}`}>
-                    Sumber: {selectedBudgetAccount?.name || 'Dompet tidak ditemukan'} · Sisa setelah transaksi: {formatRupiah(projectedRemaining)} dari alokasi {formatRupiah(selectedBudget.amount)}.
+                    Sumber: {selectedBudgetAccount?.name || 'Dompet tidak ditemukan'} · {projectedRemaining < 0 ? `Over budget setelah transaksi: ${formatRupiah(Math.abs(projectedRemaining))}` : `Sisa setelah transaksi: ${formatRupiah(projectedRemaining)}`} dari alokasi {formatRupiah(selectedBudget.amount)}. {projectedRemaining < 0 ? 'Tetap bisa disimpan selama saldo dompet sumber cukup.' : ''}
                   </p>
                 ) : (
-                  <p className="budget-hint">Pengeluaran wajib memilih alokasi. Dompet akan otomatis mengikuti sumber anggaran pada alokasi.</p>
+                  <p className="budget-hint">Pengeluaran wajib memilih alokasi. Jika alokasi belum muncul, cek tanggal transaksi karena daftar mengikuti bulan/tahun transaksi.</p>
                 )}
               </div>
             ) : (
