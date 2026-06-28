@@ -1,75 +1,81 @@
-export const BUDGET_CYCLE_START_DAY = 25;
+const MONTH_NAMES = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
 
-function pad(value) {
-  return String(value).padStart(2, '0');
+function makeDate(year, month, day) {
+  return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
-function parseDate(value = new Date()) {
-  if (value instanceof Date) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12, 0, 0, 0);
-  }
-
-  const [year, month, day] = String(value || '').split('-').map(Number);
-  if (!year || !month || !day) {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
-  }
-
-  return new Date(year, month - 1, day, 12, 0, 0, 0);
+function toIsoDate(date) {
+  return date.toISOString().slice(0, 10);
 }
 
-function addMonths(month, year, delta) {
-  const date = new Date(year, month - 1 + delta, 1, 12, 0, 0, 0);
-  return { month: date.getMonth() + 1, year: date.getFullYear() };
+function parseDate(dateString) {
+  if (!dateString) return null;
+  const date = new Date(`${dateString}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function getBudgetCycle(dateInput = new Date()) {
-  const date = parseDate(dateInput);
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
+export function getBudgetCyclePeriod(dateInput = new Date()) {
+  const date = dateInput instanceof Date ? dateInput : parseDate(dateInput);
+  const safeDate = date && !Number.isNaN(date.getTime()) ? date : new Date();
 
-  if (date.getDate() < BUDGET_CYCLE_START_DAY) {
-    return addMonths(month, year, -1);
+  let month = safeDate.getMonth() + 1;
+  let year = safeDate.getFullYear();
+
+  if (safeDate.getDate() < 25) {
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
   }
 
   return { month, year };
 }
 
-export function getCurrentBudgetCycle() {
-  return getBudgetCycle(new Date());
-}
-
 export function getBudgetCycleRange(month, year) {
-  const safeMonth = Number(month);
-  const safeYear = Number(year);
-  const next = addMonths(safeMonth, safeYear, 1);
+  const startDate = makeDate(year, month, 25);
+  const endDate = makeDate(year, month, 24);
+  endDate.setMonth(endDate.getMonth() + 1);
 
   return {
-    start: `${safeYear}-${pad(safeMonth)}-${BUDGET_CYCLE_START_DAY}`,
-    end: `${next.year}-${pad(next.month)}-${BUDGET_CYCLE_START_DAY - 1}`,
+    startDate,
+    endDate,
+    startIso: toIsoDate(startDate),
+    endIso: toIsoDate(endDate),
+    label: `${startDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} - ${endDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`,
   };
 }
 
-export function formatBudgetCycleRange(month, year) {
-  const { start, end } = getBudgetCycleRange(month, year);
-  const formatter = new Intl.DateTimeFormat('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+export function isDateInBudgetCycle(dateString, month, year) {
+  const date = parseDate(dateString);
+  if (!date) return false;
 
-  return `${formatter.format(parseDate(start))} - ${formatter.format(parseDate(end))}`;
+  const { startDate, endDate } = getBudgetCycleRange(month, year);
+  return date >= startDate && date <= endDate;
 }
 
-export function formatBudgetCycleLabel(month, year) {
-  return `${pad(month)}/${year}`;
+export function getBudgetCycleLabel(month, year) {
+  const { label } = getBudgetCycleRange(month, year);
+  return `${MONTH_NAMES[Number(month) - 1]} ${year} (${label})`;
 }
 
-export function isDateInBudgetCycle(dateInput, month, year) {
-  const cycle = getBudgetCycle(dateInput);
-  return Number(cycle.month) === Number(month) && Number(cycle.year) === Number(year);
+export function getBudgetCycleShortLabel(month, year) {
+  return `${String(month).padStart(2, '0')}/${year}`;
 }
 
-export function getBudgetCycleTransactions(transactions = [], month, year) {
-  return transactions.filter((transaction) => isDateInBudgetCycle(transaction.transactionDate, month, year));
+export function getBudgetCyclePeriodFromDate(dateString) {
+  return getBudgetCyclePeriod(dateString);
 }
