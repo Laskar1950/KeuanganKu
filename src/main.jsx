@@ -13,7 +13,7 @@ import './auth-soft-login.css';
 import './role-management.css';
 import './allocation-picker.css';
 import './budget-wallet-detail.css';
-import './over-budget.css';
+import './budget-cycle-reset.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
