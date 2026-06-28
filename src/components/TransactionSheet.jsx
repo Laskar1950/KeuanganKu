@@ -3,14 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, PlusCircle, Search, Wallet, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { formatRupiah } from '../utils/format.js';
-import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import { getBudgetUsage } from '../utils/calculations.js';
+import { getBudgetCycle, getBudgetCycleTransactions, formatBudgetCycleRange } from '../utils/budgetCycle.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-function getCycle(dateString) {
-  const [year, month] = String(dateString || '').split('-').map(Number);
-  return { month, year };
-}
 
 const emptyForm = () => ({
   type: 'expense',
@@ -71,8 +68,8 @@ function AllocationPickerModal({
             <div className="allocation-picker-header">
               <div>
                 <p className="section-kicker">Pilih alokasi</p>
-                <h3>Alokasi periode {String(cycle.month || '').padStart(2, '0')}/{cycle.year || '-'}</h3>
-                <small>{budgets.length} alokasi tersedia sesuai tanggal transaksi.</small>
+                <h3>Periode gajian {String(cycle.month || '').padStart(2, '0')}/{cycle.year || '-'}</h3>
+                <small>{formatBudgetCycleRange(cycle.month, cycle.year)} · {budgets.length} alokasi tersedia.</small>
               </div>
               <button type="button" className="icon-btn" onClick={onClose} aria-label="Tutup pilihan alokasi">
                 <X size={18} />
@@ -96,15 +93,13 @@ function AllocationPickerModal({
                   budget,
                   transactions.filter((trx) => trx.id !== selectedTransactionId)
                 );
-                const rawProgress = budget.amount > 0 ? Math.round((usage.used / budget.amount) * 100) : 0;
-                const progress = Math.min(100, rawProgress);
-                const overBudget = Number(usage.remaining || 0) < 0;
+                const progress = budget.amount > 0 ? Math.min(100, Math.round((usage.used / budget.amount) * 100)) : 0;
                 const isSelected = selectedBudgetId === budget.id;
 
                 return (
                   <button
                     type="button"
-                    className={`allocation-option-card ${isSelected ? 'selected' : ''} ${overBudget ? 'over-budget' : ''}`}
+                    className={`allocation-option-card ${isSelected ? 'selected' : ''}`}
                     key={budget.id}
                     onClick={() => onSelect(budget.id)}
                   >
@@ -120,10 +115,9 @@ function AllocationPickerModal({
                       <span className="allocation-option-progress"><i style={{ width: `${progress}%` }} /></span>
                     </span>
                     <span className="allocation-option-amounts">
-                      <em>{overBudget ? 'Over budget' : 'Sisa'}</em>
-                      <strong className={overBudget ? 'danger' : ''}>{overBudget ? formatRupiah(Math.abs(usage.remaining)) : formatRupiah(usage.remaining)}</strong>
+                      <em>Sisa</em>
+                      <strong className={usage.remaining <= 0 ? 'danger' : ''}>{formatRupiah(usage.remaining)}</strong>
                       <small>Dipakai {formatRupiah(usage.used)} dari {formatRupiah(budget.amount)}</small>
-                      {overBudget ? <small className="allocation-over-note">Tetap bisa dipakai jika saldo dompet cukup</small> : null}
                     </span>
                   </button>
                 );
@@ -187,9 +181,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     [categories]
   );
 
-  const cycle = useMemo(() => getCycle(form.transactionDate), [form.transactionDate]);
+  const cycle = useMemo(() => getBudgetCycle(form.transactionDate), [form.transactionDate]);
   const monthTransactions = useMemo(
-    () => getMonthTransactions(transactions, cycle.month, cycle.year).filter((trx) => trx.id !== editingTransaction?.id),
+    () => getBudgetCycleTransactions(transactions, cycle.month, cycle.year).filter((trx) => trx.id !== editingTransaction?.id),
     [transactions, cycle.month, cycle.year, editingTransaction?.id]
   );
 
@@ -220,7 +214,6 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const selectedBudgetUsage = selectedBudget ? getBudgetUsage(selectedBudget, monthTransactions) : null;
   const selectedBudgetAccount = selectedBudget ? accountBalances.find((account) => account.id === selectedBudget.accountId) : null;
   const projectedRemaining = selectedBudgetUsage ? selectedBudgetUsage.remaining - Number(form.amount || 0) : null;
-  const selectedBudgetIsOver = selectedBudgetUsage ? Number(selectedBudgetUsage.remaining || 0) < 0 : false;
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
   const setType = (type) => setForm((prev) => ({ ...prev, type, categoryId: '', budgetId: '', accountId: '' }));
@@ -251,25 +244,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     event.preventDefault();
     try {
       const isExpense = form.type === 'expense';
-      const amount = Number(form.amount || 0);
-      if (isExpense) {
-        if (!selectedBudget) throw new Error('Pengeluaran wajib memilih alokasi anggaran.');
-        const previousExpenseImpact = editingTransaction?.type === 'expense' && editingTransaction.accountId === selectedBudget.accountId
-          ? Number(editingTransaction.amount || 0)
-          : 0;
-        const availableBalance = Number(selectedBudgetAccount?.currentBalance || 0) + previousExpenseImpact;
-        if (availableBalance < amount) {
-          throw new Error(`Saldo dompet ${selectedBudgetAccount?.name || 'sumber'} tidak mencukupi. Saldo tersedia ${formatRupiah(availableBalance)}.`);
-        }
-        if (projectedRemaining < 0) {
-          const confirmed = window.confirm(`Transaksi ini akan membuat alokasi "${selectedBudget.name}" over budget sebesar ${formatRupiah(Math.abs(projectedRemaining))}. Tetap simpan pengeluaran?`);
-          if (!confirmed) return;
-        }
-      }
-
       const payload = {
         ...form,
-        amount,
+        amount: Number(form.amount),
         categoryId: isExpense ? null : form.categoryId || incomeCategories[0]?.id,
         accountId: isExpense ? selectedBudget?.accountId || '' : form.accountId || accountBalances.find((account) => account.isActive)?.id,
         budgetId: isExpense ? form.budgetId || null : null,
@@ -323,13 +300,13 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
                         <strong>{selectedBudget.name}</strong>
                         <small>{selectedBudgetAccount?.name || 'Dompet tidak ditemukan'}</small>
                       </span>
-                      <em className={selectedBudgetIsOver ? 'danger' : ''}>{selectedBudgetIsOver ? `Over ${formatRupiah(Math.abs(selectedBudgetUsage?.remaining || 0))}` : `${formatRupiah(selectedBudgetUsage?.remaining || 0)} tersisa`}</em>
+                      <em>{formatRupiah(selectedBudgetUsage?.remaining || 0)} tersisa</em>
                     </>
                   ) : (
                     <>
                       <span>
                         <strong>Pilih alokasi</strong>
-                        <small>{availableBudgets.length} alokasi tersedia untuk periode ini</small>
+                        <small>{availableBudgets.length} alokasi tersedia · {formatBudgetCycleRange(cycle.month, cycle.year)}</small>
                       </span>
                       <em>Pilih</em>
                     </>
@@ -352,10 +329,10 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
                 {selectedBudgetUsage ? (
                   <p className={`budget-hint ${projectedRemaining < 0 ? 'danger' : ''}`}>
-                    Sumber: {selectedBudgetAccount?.name || 'Dompet tidak ditemukan'} · {projectedRemaining < 0 ? `Over budget setelah transaksi: ${formatRupiah(Math.abs(projectedRemaining))}` : `Sisa setelah transaksi: ${formatRupiah(projectedRemaining)}`} dari alokasi {formatRupiah(selectedBudget.amount)}. {projectedRemaining < 0 ? 'Tetap bisa disimpan selama saldo dompet sumber cukup.' : ''}
+                    Sumber: {selectedBudgetAccount?.name || 'Dompet tidak ditemukan'} · Sisa setelah transaksi: {formatRupiah(projectedRemaining)} dari alokasi {formatRupiah(selectedBudget.amount)}. Periode reset tiap tanggal 25.
                   </p>
                 ) : (
-                  <p className="budget-hint">Pengeluaran wajib memilih alokasi. Jika alokasi belum muncul, cek tanggal transaksi karena daftar mengikuti bulan/tahun transaksi.</p>
+                  <p className="budget-hint">Pengeluaran wajib memilih alokasi. Daftar mengikuti periode gajian: tanggal 25 sampai 24 bulan berikutnya.</p>
                 )}
               </div>
             ) : (
