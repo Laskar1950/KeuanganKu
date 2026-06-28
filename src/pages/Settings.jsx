@@ -87,6 +87,9 @@ export default function Settings() {
   const [processingMemberId, setProcessingMemberId] = useState('');
 
   const isOwner = currentMember?.role === 'owner';
+  const isAdmin = currentMember?.role === 'admin';
+  const canManageMembers = isOwner || isAdmin;
+  const canManageWallets = isOwner || isAdmin;
   const incomeCategories = categories.filter((category) => category.type === 'income');
   const familyIncomeCategories = incomeCategories.filter((category) => category.familyId);
   const defaultIncomeCategories = incomeCategories.filter((category) => !category.familyId);
@@ -213,7 +216,8 @@ export default function Settings() {
   const submitAddMember = async (event) => {
     event.preventDefault();
     try {
-      if (!isOwner) throw new Error('Hanya owner yang bisa menambahkan anggota.');
+      if (!canManageMembers) throw new Error('Hanya owner atau admin yang bisa menambahkan anggota.');
+      if (isAdmin && memberForm.role !== 'member') throw new Error('Admin hanya bisa menambahkan anggota sebagai member.');
       if (!memberForm.identifier.trim()) throw new Error('Email atau username anggota wajib diisi.');
       setAddingMember(true);
       const { error } = await supabase.rpc('add_family_member_by_identifier', {
@@ -230,8 +234,9 @@ export default function Settings() {
 
   const saveMemberRole = async (member) => {
     try {
-      if (!isOwner) throw new Error('Hanya owner yang bisa mengubah role anggota.');
-      if (member.userId === user?.id) throw new Error('Owner tidak bisa mengubah role dirinya sendiri.');
+      if (!canManageMembers) throw new Error('Hanya owner atau admin yang bisa mengubah role anggota.');
+      if (member.userId === user?.id) throw new Error('Anda tidak bisa mengubah role akun sendiri.');
+      if (isAdmin && member.role !== 'member') throw new Error('Admin tidak bisa mengubah role owner atau admin lain.');
       const nextRole = roleDrafts[member.id] || member.role;
       if (!nextRole || nextRole === 'owner') throw new Error('Role tidak valid.');
       if (nextRole === member.role) {
@@ -252,8 +257,9 @@ export default function Settings() {
 
   const removeMember = async (member) => {
     try {
-      if (!isOwner) throw new Error('Hanya owner yang bisa menghapus anggota.');
-      if (member.userId === user?.id) throw new Error('Owner tidak bisa menghapus dirinya sendiri.');
+      if (!canManageMembers) throw new Error('Hanya owner atau admin yang bisa menghapus anggota.');
+      if (member.userId === user?.id) throw new Error('Anda tidak bisa menghapus akun sendiri.');
+      if (isAdmin && member.role !== 'member') throw new Error('Admin tidak bisa menghapus owner atau admin lain.');
       const memberName = member.profile?.name || member.profile?.email || 'anggota ini';
       if (!window.confirm(`Hapus ${memberName} dari keluarga?`)) return;
       setProcessingMemberId(member.id);
@@ -388,16 +394,16 @@ export default function Settings() {
         <div className="invite-box family-invite-box"><div><p className="mini-label">Kode undangan keluarga</p><strong>{household?.inviteCode || '-'}</strong></div><button className="small-btn" onClick={copyInviteCode} type="button"><Copy size={14} /> Salin</button></div>
       </Card>
 
-      {isOwner && (
+      {canManageMembers && (
         <Card className="role-management-card add-member-card">
           <div className="row-between">
             <div>
               <p className="section-kicker">Role Management</p>
               <h2>Tambah Anggota</h2>
             </div>
-            <span className="role-pill owner">Owner</span>
+            <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
           </div>
-          <p className="muted tiny role-management-help">Tambahkan anggota yang sudah punya akun menggunakan email atau username. Untuk membuat akun baru langsung dari aplikasi, lanjutkan lewat Edge Function pada tahap berikutnya.</p>
+          <p className="muted tiny role-management-help">Owner dapat menambahkan anggota sebagai admin atau member. Admin dapat menambahkan anggota sebagai member dan mengelola anggota yang bukan owner/admin.</p>
           <form className="form-grid add-member-form" onSubmit={submitAddMember}>
             <div className="field">
               <label>Email atau Username</label>
@@ -412,7 +418,7 @@ export default function Settings() {
               <label>Role</label>
               <select value={memberForm.role} onChange={(event) => setMemberForm({ ...memberForm, role: event.target.value })}>
                 <option value="member">Member</option>
-                <option value="admin">Admin</option>
+                {isOwner && <option value="admin">Admin</option>}
               </select>
             </div>
             <button className="secondary-btn" type="submit" disabled={addingMember}>
@@ -428,12 +434,13 @@ export default function Settings() {
           <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
         </div>
 
-        {!isOwner && <p className="muted tiny role-management-help">Hanya owner keluarga yang bisa menambahkan anggota, mengubah role, dan menghapus anggota.</p>}
+        {!canManageMembers && <p className="muted tiny role-management-help">Hanya owner atau admin keluarga yang bisa menambahkan anggota, mengubah role, dan menghapus anggota.</p>}
 
         <div className="drawer-list role-member-list">
           {familyMembers.map((member) => {
             const isSelf = member.userId === user?.id;
             const isLockedOwner = member.role === 'owner';
+            const canActOnMember = canManageMembers && !isSelf && !isLockedOwner && (isOwner || member.role === 'member');
             const isProcessing = processingMemberId === member.id;
             return (
               <div className={`member-row role-member-row ${isLockedOwner ? 'locked-owner' : ''}`} key={member.id}>
@@ -447,7 +454,7 @@ export default function Settings() {
                 <div className="role-member-actions">
                   <span className={`role-pill ${member.role}`}>{roleLabel[member.role] || member.role}</span>
 
-                  {isOwner && !isSelf && !isLockedOwner && (
+                  {canActOnMember && (
                     <>
                       <select
                         className="role-select"
@@ -469,8 +476,9 @@ export default function Settings() {
                     </>
                   )}
 
-                  {isOwner && isSelf && <p className="muted tiny role-note">Akun Anda</p>}
-                  {isLockedOwner && !isSelf && <p className="muted tiny role-note">Owner utama</p>}
+                  {canManageMembers && isSelf && <p className="muted tiny role-note">Akun Anda</p>}
+                  {canManageMembers && isLockedOwner && !isSelf && <p className="muted tiny role-note">Owner utama</p>}
+                  {isAdmin && member.role === 'admin' && !isSelf && <p className="muted tiny role-note">Admin lain</p>}
                 </div>
               </div>
             );
@@ -484,22 +492,22 @@ export default function Settings() {
     <>
       {renderPanelHeader('Dompet Keluarga', 'Keuangan')}
       <Card>
-        <div className="row-between"><div><p className="section-kicker">Akun & Dompet</p><h2>Kelola Dompet</h2></div>{!isOwner && <span className="role-pill member">Read only</span>}</div>
+        <div className="row-between"><div><p className="section-kicker">Akun & Dompet</p><h2>Kelola Dompet</h2></div>{!canManageWallets && <span className="role-pill member">Read only</span>}</div>
         <div className="drawer-list" style={{ marginTop: 12 }}>
           {accountBalances.map((account) => (
             <div className="wallet-row wallet-management-row" key={account.id}>
               <div className="avatar"><Wallet size={18} /></div>
               <div className="item-main"><p className="item-title">{account.name}</p><p className="item-sub">{accountTypeLabel[account.type] || account.type} • {account.isActive ? 'Aktif' : 'Nonaktif'}</p></div>
-              <div className="wallet-actions"><p className="amount">{formatRupiah(account.currentBalance)}</p>{isOwner && <div className="inline-actions"><button className="action-btn edit" type="button" onClick={() => startEditAccount(account)}><Pencil size={12} /> Edit</button><button className="link-btn tiny" type="button" onClick={() => toggleAccount(account.id)}>{account.isActive ? 'Nonaktifkan' : 'Aktifkan'}</button></div>}</div>
+              <div className="wallet-actions"><p className="amount">{formatRupiah(account.currentBalance)}</p>{canManageWallets && <div className="inline-actions"><button className="action-btn edit" type="button" onClick={() => startEditAccount(account)}><Pencil size={12} /> Edit</button><button className="link-btn tiny" type="button" onClick={() => toggleAccount(account.id)}>{account.isActive ? 'Nonaktifkan' : 'Aktifkan'}</button></div>}</div>
             </div>
           ))}
         </div>
-        {isOwner ? <form className="form-grid" onSubmit={submitAccount} style={{ marginTop: 16 }}>
+        {canManageWallets ? <form className="form-grid" onSubmit={submitAccount} style={{ marginTop: 16 }}>
           <div className="row-between"><p className="section-kicker">{editingAccountId ? 'Edit Dompet' : 'Tambah Dompet'}</p>{editingAccountId && <button className="small-btn" type="button" onClick={cancelEditAccount}><X size={13} /> Batal</button>}</div>
           <div className="field"><label>Nama akun/dompet</label><input value={accountForm.name} onChange={(event) => setAccountForm({ ...accountForm, name: event.target.value })} placeholder="Contoh: Bank Mandiri" /></div>
           <div className="grid-2"><div className="field"><label>Jenis</label><select value={accountForm.type} onChange={(event) => setAccountForm({ ...accountForm, type: event.target.value })}>{Object.entries(accountTypeLabel).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></div><div className="field"><label>Saldo awal</label><input type="number" value={accountForm.initialBalance} onChange={(event) => setAccountForm({ ...accountForm, initialBalance: event.target.value })} /></div></div>
           <button className="secondary-btn">{editingAccountId ? 'Simpan Perubahan Dompet' : 'Tambah Akun/Dompet'}</button>
-        </form> : <p className="muted tiny owner-only-note">Hanya owner keluarga yang bisa menambah, mengedit, atau menonaktifkan dompet.</p>}
+        </form> : <p className="muted tiny owner-only-note">Hanya owner atau admin keluarga yang bisa menambah, mengedit, atau menonaktifkan dompet.</p>}
       </Card>
     </>
   );
