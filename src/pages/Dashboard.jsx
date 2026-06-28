@@ -3,11 +3,10 @@ import { Bell, Eye, EyeOff, PiggyBank, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { formatRupiah } from '../utils/format.js';
-import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import { getBudgetUsage } from '../utils/calculations.js';
+import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange } from '../utils/budgetCycle.js';
 import FinanceDetailModal from '../components/FinanceDetailModal.jsx';
 
-const monthNow = () => new Date().getMonth() + 1;
-const yearNow = () => new Date().getFullYear();
 const walletColors = ['blue', 'green', 'amber', 'rose', 'violet'];
 
 function initials(name = 'Pengguna') {
@@ -63,8 +62,9 @@ export default function Dashboard({ goTo, onNavigate }) {
 
   const navigate = goTo || onNavigate;
 
-  const currentMonthTransactions = useMemo(() => getMonthTransactions(transactions, monthNow(), yearNow()), [transactions]);
-  const currentBudgets = useMemo(() => budgets.filter((budget) => Number(budget.month) === monthNow() && Number(budget.year) === yearNow()), [budgets]);
+  const activeCycle = useMemo(() => getCurrentBudgetCycle(), []);
+  const currentMonthTransactions = useMemo(() => getBudgetCycleTransactions(transactions, activeCycle.month, activeCycle.year), [transactions, activeCycle.month, activeCycle.year]);
+  const currentBudgets = useMemo(() => budgets.filter((budget) => Number(budget.month) === Number(activeCycle.month) && Number(budget.year) === Number(activeCycle.year)), [budgets, activeCycle.month, activeCycle.year]);
   const unreadNotifications = notifications.filter((item) => !item.readAt);
   const latestTransactions = useMemo(() => [...transactions].slice(0, 4), [transactions]);
 
@@ -202,8 +202,9 @@ export default function Dashboard({ goTo, onNavigate }) {
       <section>
         <div className="section-head">
           <div>
-            <p className="section-kicker">Alokasi Bulan Ini</p>
+            <p className="section-kicker">Alokasi Periode Ini</p>
             <h2>Ringkasan budget</h2>
+            <small>{formatBudgetCycleRange(activeCycle.month, activeCycle.year)}</small>
           </div>
           <button className="section-link" type="button" onClick={() => navigate?.('budgets')}>Lihat semua</button>
         </div>
@@ -252,7 +253,7 @@ export default function Dashboard({ goTo, onNavigate }) {
                   <ProgressBar value={progress} variant={variant} />
                 </button>
               );
-            }) : <p className="playful-empty-inline">Belum ada alokasi untuk bulan ini.</p>}
+            }) : <p className="playful-empty-inline">Belum ada alokasi untuk periode gajian ini.</p>}
           </div>
         </Card>
       </section>
