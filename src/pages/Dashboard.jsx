@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, Eye, EyeOff, PiggyBank, Plus, UsersRound, Wallet } from 'lucide-react';
+import { Bell, Eye, EyeOff, PiggyBank, Plus, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { formatRupiah } from '../utils/format.js';
@@ -22,11 +22,32 @@ function Avatar({ user }) {
   );
 }
 
+function getProgressVariant(progressRaw, isOverBudget = false) {
+  if (isOverBudget || progressRaw >= 100) return 'red';
+  if (progressRaw >= 75) return 'amber';
+  return 'green';
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickAdd }) {
   const {
     user,
     household,
-    familyMembers,
     accountBalances,
     transactions,
     budgets,
@@ -46,6 +67,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
   const currentMonthTransactions = useMemo(() => getMonthTransactions(transactions, monthNow(), yearNow()), [transactions]);
   const currentBudgets = useMemo(() => budgets.filter((budget) => Number(budget.month) === monthNow() && Number(budget.year) === yearNow()), [budgets]);
   const unreadNotifications = notifications.filter((item) => !item.readAt);
+  const latestTransactions = useMemo(() => [...transactions].slice(0, 4), [transactions]);
 
   const totalBalance = accountBalances.reduce((sum, account) => sum + Number(account.currentBalance || 0), 0);
   const monthlyIncome = currentMonthTransactions.filter((trx) => trx.type === 'income').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
@@ -58,6 +80,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
     const usage = getBudgetUsage(budget, currentMonthTransactions);
     return sum + Math.max(0, Math.abs(Math.min(usage.remaining, 0)));
   }, 0);
+  const budgetVariant = getProgressVariant(budgetProgressRaw, overBudgetAmount > 0);
 
   const openWalletDetail = (wallet) => setDetail({ open: true, type: 'wallet', item: wallet });
   const openBudgetDetail = (budget) => setDetail({ open: true, type: 'budget', item: budget });
@@ -85,9 +108,6 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
             <Bell size={18} />
             {unreadNotifications.length > 0 && <span className="notification-dot">{unreadNotifications.length}</span>}
           </button>
-          <button className="icon-btn playful-icon-btn" type="button" onClick={() => setShowBalance((value) => !value)} aria-label="Tampilkan saldo">
-            {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
-          </button>
         </div>
       </header>
 
@@ -114,7 +134,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
         </Card>
       )}
 
-      <Card className="playful-balance-card">
+      <section className="playful-balance-card dashboard-gradient-balance-card">
         <div className="playful-balance-top">
           <div>
             <p>Total Saldo Keluarga</p>
@@ -142,7 +162,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
         <button className="primary-btn playful-primary-btn" type="button" onClick={quickAdd} style={{ marginTop: 14, position: 'relative', zIndex: 1 }}>
           <Plus size={16} /> Catat Transaksi
         </button>
-      </Card>
+      </section>
 
       <section>
         <div className="section-head">
@@ -196,10 +216,10 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
             </div>
             <div>
               <span>{overBudgetAmount > 0 ? 'Over budget' : 'Progress'}</span>
-              <strong>{overBudgetAmount > 0 ? formatRupiah(overBudgetAmount) : `${budgetProgress}%`}</strong>
+              <strong>{overBudgetAmount > 0 ? formatRupiah(overBudgetAmount) : `${budgetProgressRaw}%`}</strong>
             </div>
           </div>
-          <ProgressBar value={budgetProgress} variant={overBudgetAmount > 0 ? 'red' : 'amber'} />
+          <ProgressBar value={budgetProgress} variant={budgetVariant} />
 
           <div style={{ marginTop: 12 }}>
             {currentBudgets.length ? currentBudgets.slice(0, 4).map((budget) => {
@@ -208,6 +228,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
               const progressRaw = budget.amount > 0 ? Math.round((usage.used / budget.amount) * 100) : 0;
               const progress = Math.min(100, progressRaw);
               const overBudget = Number(usage.remaining || 0) < 0;
+              const variant = getProgressVariant(progressRaw, overBudget);
 
               return (
                 <button
@@ -224,7 +245,7 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
                     </div>
                     <strong className={overBudget ? 'amount expense' : ''}>{overBudget ? `Over ${formatRupiah(Math.abs(usage.remaining))}` : formatRupiah(usage.remaining)}</strong>
                   </div>
-                  <ProgressBar value={progress} variant={overBudget ? 'red' : 'amber'} />
+                  <ProgressBar value={progress} variant={variant} />
                 </button>
               );
             }) : <p className="playful-empty-inline">Belum ada alokasi untuk bulan ini.</p>}
@@ -242,26 +263,19 @@ export default function Dashboard({ onAddTransaction, goTo, onNavigate, onQuickA
         </div>
 
         <div className="transaction-list">
-          {transactions.length ? transactions.slice(0, 6).map((trx) => (
+          {latestTransactions.length ? latestTransactions.map((trx) => (
             <div className="transaction-item" key={trx.id}>
               <span className={`transaction-icon ${trx.type}`}>{trx.type === 'income' ? '+' : '-'}</span>
               <div>
                 <strong>{trx.note || (trx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')}</strong>
-                <p className="item-sub">{trx.transactionDate}</p>
+                <p className="item-sub">{formatDateTime(trx.createdAt || trx.updatedAt || trx.transactionDate)}</p>
+                {trx.transactionDate && <p className="item-sub">Tanggal transaksi: {trx.transactionDate}</p>}
               </div>
               <strong className={`amount ${trx.type}`}>{trx.type === 'income' ? '+' : '-'}{formatRupiah(trx.amount)}</strong>
             </div>
           )) : <Card>Belum ada transaksi.</Card>}
         </div>
       </section>
-
-      <Card className="family-mini-card">
-        <UsersRound size={18} />
-        <div>
-          <strong>{familyMembers.length} anggota keluarga</strong>
-          <small>Kode keluarga: {household?.inviteCode || '-'}</small>
-        </div>
-      </Card>
 
       <FinanceDetailModal
         open={detail.open}
