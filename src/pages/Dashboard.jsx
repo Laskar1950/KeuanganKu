@@ -1,296 +1,231 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Banknote,
-  Bell,
-  ChevronRight,
-  Copy,
-  Eye,
-  EyeOff,
-  Landmark,
-  PiggyBank,
-  ReceiptText,
-  Smartphone,
-  Target,
-  UserPlus,
-  UsersRound,
-  Wallet,
-} from 'lucide-react';
+import { Bell, Eye, EyeOff, PiggyBank, Plus, UsersRound, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { Card, ProgressBar, SectionHead, StatusPill } from '../components/UI.jsx';
-import TransactionList from '../components/TransactionList.jsx';
-import { currentMonthYear, formatRupiah } from '../utils/format.js';
-import { getBudgetUsage, getMonthTransactions, getTotalBalance, sumByType } from '../utils/calculations.js';
+import { Card, ProgressBar } from '../components/UI.jsx';
+import { formatRupiah } from '../utils/format.js';
+import { getBudgetUsage, getMonthTransactions } from '../utils/calculations.js';
+import FinanceDetailModal from '../components/FinanceDetailModal.jsx';
 
-const accountTypeLabel = {
-  cash: 'Cash keluarga',
-  bank: 'Bank keluarga',
-  ewallet: 'E-Wallet',
-  saving: 'Tabungan',
-  other: 'Dompet lainnya',
-};
+const monthNow = () => new Date().getMonth() + 1;
+const yearNow = () => new Date().getFullYear();
 
-const walletAccent = {
-  cash: 'amber',
-  bank: 'blue',
-  ewallet: 'green',
-  saving: 'rose',
-  other: 'violet',
-};
-
-function maskMoney() {
-  return 'Rp •••••••';
+function initials(name = 'Pengguna') {
+  return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'P';
 }
 
-function AccountIcon({ type }) {
-  const icons = {
-    cash: Banknote,
-    bank: Landmark,
-    ewallet: Smartphone,
-    saving: PiggyBank,
-    other: Wallet,
-  };
-  const Icon = icons[type] || Wallet;
-  return <Icon size={18} />;
+function Avatar({ user }) {
+  return (
+    <div className="dashboard-user-avatar">
+      {user?.avatarUrl ? <img src={user.avatarUrl} alt={user?.name || 'Foto profil'} /> : <span>{initials(user?.name)}</span>}
+    </div>
+  );
 }
 
-function NotificationIcon({ type }) {
-  if (type === 'member') return <UserPlus size={16} />;
-  return <ReceiptText size={16} />;
-}
-
-export default function Dashboard({ goTo }) {
+export default function Dashboard({ onNavigate, onQuickAdd }) {
   const {
+    user,
     household,
     familyMembers,
-    transactions,
-    categories,
     accountBalances,
+    transactions,
     budgets,
-    notifications,
-    copyInviteCode,
-    requestNotificationPermission,
+    notifications = [],
     markNotificationRead,
     markAllNotificationsRead,
+    requestNotificationPermission,
   } = useApp();
-  const { month, year } = currentMonthYear();
-  const [showBalance, setShowBalance] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
 
-  const monthTransactions = useMemo(() => getMonthTransactions(transactions, month, year), [transactions, month, year]);
-  const income = sumByType(monthTransactions, 'income');
-  const expense = sumByType(monthTransactions, 'expense');
-  const totalBalance = getTotalBalance(accountBalances, transactions);
-  const activeAccounts = accountBalances.filter((acc) => acc.isActive);
-  const unreadNotifications = notifications.filter((notification) => !notification.readAt);
-  const unreadCount = unreadNotifications.length;
+  const [showBalance, setShowBalance] = useState(true);
+  const [detail, setDetail] = useState({ open: false, type: '', item: null });
+  const [showNotifications, setShowNotifications] = useState(false);
 
-  const monthBudgets = useMemo(
-    () => budgets.filter((budget) => budget.month === month && budget.year === year),
-    [budgets, month, year]
-  );
+  const currentMonthTransactions = useMemo(() => getMonthTransactions(transactions, monthNow(), yearNow()), [transactions]);
+  const currentBudgets = useMemo(() => budgets.filter((budget) => Number(budget.month) === monthNow() && Number(budget.year) === yearNow()), [budgets]);
+  const unreadNotifications = notifications.filter((item) => !item.readAt);
 
-  const budgetUsages = useMemo(
-    () => monthBudgets.map((budget) => ({ budget, usage: getBudgetUsage(budget, monthTransactions) })),
-    [monthBudgets, monthTransactions]
-  );
+  const totalBalance = accountBalances.reduce((sum, account) => sum + Number(account.currentBalance || 0), 0);
+  const monthlyIncome = currentMonthTransactions.filter((trx) => trx.type === 'income').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
+  const monthlyExpense = currentMonthTransactions.filter((trx) => trx.type === 'expense').reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
+  const totalBudget = currentBudgets.reduce((sum, budget) => sum + Number(budget.amount || 0), 0);
+  const usedBudget = currentBudgets.reduce((sum, budget) => sum + getBudgetUsage(budget, currentMonthTransactions).used, 0);
+  const budgetProgressRaw = totalBudget > 0 ? Math.round((usedBudget / totalBudget) * 100) : 0;
+  const budgetProgress = Math.min(100, budgetProgressRaw);
+  const overBudgetAmount = currentBudgets.reduce((sum, budget) => {
+    const usage = getBudgetUsage(budget, currentMonthTransactions);
+    return sum + Math.max(0, Math.abs(Math.min(usage.remaining, 0)));
+  }, 0);
 
-  const totalBudget = monthBudgets.reduce((total, budget) => total + Number(budget.amount || 0), 0);
-  const totalUsed = budgetUsages.reduce((total, item) => total + Number(item.usage.used || 0), 0);
-  const totalRemaining = totalBudget - totalUsed;
+  const openWalletDetail = (wallet) => setDetail({ open: true, type: 'wallet', item: wallet });
+  const openBudgetDetail = (budget) => setDetail({ open: true, type: 'budget', item: budget });
+  const closeDetail = () => setDetail({ open: false, type: '', item: null });
 
-  const openNotification = async (notification) => {
-    await markNotificationRead(notification.id);
-    setNotificationOpen(false);
-    goTo(notification.target || 'dashboard');
-  };
-
-  const markAsReadOnly = async (notification) => {
-    await markNotificationRead(notification.id);
-  };
-
-  const markAllAsRead = async () => {
-    await markAllNotificationsRead();
+  const handleNotificationClick = async (notification) => {
+    if (!notification.readAt) await markNotificationRead?.(notification.id);
+    if (notification.target && typeof onNavigate === 'function') onNavigate(notification.target);
+    setShowNotifications(false);
   };
 
   return (
-    <div className="page playful-dashboard-page">
-      <header className="header playful-topbar">
-        <button className="playful-brand" type="button" onClick={() => goTo('family')}>
-          <span className="brand-mark">K</span>
-          <span className="brand-copy">
-            <small>KeuanganKu</small>
-            <strong>{household?.name || 'Dashboard'}</strong>
-          </span>
-          <ChevronRight size={15} />
-        </button>
-
-        <div className="notification-wrap">
-          <button
-            className="icon-btn notification-btn playful-icon-btn"
-            aria-label="Notifikasi"
-            type="button"
-            onClick={() => setNotificationOpen((value) => !value)}
-          >
+    <div className="page dashboard-page wallet-budget-dashboard">
+      <header className="header playful-page-header dashboard-modern-header">
+        <div className="dashboard-user-block">
+          <Avatar user={user} />
+          <div>
+            <p className="eyebrow">KeuanganKu</p>
+            <h1>Halo, {user?.name || 'Pengguna'}</h1>
+            <small>{household?.name || 'Keluarga belum dipilih'}</small>
+          </div>
+        </div>
+        <div className="dashboard-header-actions">
+          <button className="icon-btn playful-icon-btn" type="button" onClick={() => setShowNotifications((value) => !value)} aria-label="Notifikasi">
             <Bell size={18} />
-            {unreadCount > 0 && <span className="notif-dot">{Math.min(unreadCount, 9)}</span>}
+            {unreadNotifications.length > 0 && <span className="notification-dot">{unreadNotifications.length}</span>}
           </button>
-
-          {notificationOpen && (
-            <div className="notification-popover playful-notification-popover">
-              <div className="notification-head">
-                <strong>Notifikasi</strong>
-                <span>{unreadCount} belum dibaca</span>
-              </div>
-
-              <div className="notification-actions-row">
-                <button type="button" className="small-btn" onClick={requestNotificationPermission}>Aktifkan push</button>
-                {unreadCount > 0 && <button type="button" className="small-btn" onClick={markAllAsRead}>Semua sudah dibaca</button>}
-              </div>
-
-              {unreadNotifications.length === 0 ? (
-                <p className="muted tiny notification-empty">Tidak ada notifikasi baru.</p>
-              ) : (
-                <div className="notification-list">
-                  {unreadNotifications.map((notification) => (
-                    <div
-                      className="notification-item unread"
-                      key={notification.id}
-                    >
-                      <button className="notification-main" type="button" onClick={() => openNotification(notification)}>
-                        <span className={`notification-icon ${notification.type}`}>
-                          <NotificationIcon type={notification.type} />
-                        </span>
-                        <span>
-                          <strong>{notification.title}</strong>
-                          <small>{notification.message || 'Ada aktivitas baru di KeuanganKu.'}</small>
-                        </span>
-                      </button>
-                      <button className="notification-mark-read" type="button" onClick={() => markAsReadOnly(notification)}>
-                        Sudah dibaca
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <button className="icon-btn playful-icon-btn" type="button" onClick={() => setShowBalance((value) => !value)} aria-label="Tampilkan saldo">
+            {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
+          </button>
         </div>
       </header>
 
-      <section className="playful-balance-card">
-        <div className="playful-balance-top">
-          <div>
-            <p>Total saldo keluarga</p>
-            <strong>Semua dompet aktif</strong>
+      {showNotifications && (
+        <Card className="dashboard-notification-panel">
+          <div className="row-between">
+            <div>
+              <p className="section-kicker">Notifikasi</p>
+              <h2>Aktivitas terbaru</h2>
+            </div>
+            <div className="inline-actions">
+              <button className="small-btn" type="button" onClick={requestNotificationPermission}>Aktifkan push</button>
+              {unreadNotifications.length > 0 && <button className="small-btn" type="button" onClick={markAllNotificationsRead}>Semua dibaca</button>}
+            </div>
           </div>
-          <button
-            className="balance-toggle-btn"
-            type="button"
-            aria-label={showBalance ? 'Sembunyikan saldo' : 'Tampilkan saldo'}
-            onClick={() => setShowBalance((value) => !value)}
-          >
-            {showBalance ? <EyeOff size={17} /> : <Eye size={17} />}
-            <span>{showBalance ? 'Sembunyikan' : 'Tampilkan'}</span>
-          </button>
+          <div className="dashboard-notification-list">
+            {notifications.length ? notifications.slice(0, 8).map((notification) => (
+              <button className={`notification-row ${notification.readAt ? 'read' : ''}`} type="button" key={notification.id} onClick={() => handleNotificationClick(notification)}>
+                <strong>{notification.title}</strong>
+                <small>{notification.message || 'Ada aktivitas baru.'}</small>
+              </button>
+            )) : <p className="muted tiny">Belum ada notifikasi.</p>}
+          </div>
+        </Card>
+      )}
+
+      <Card className="dashboard-balance-hero">
+        <div className="row-between">
+          <div>
+            <p className="section-kicker">Total Saldo Keluarga</p>
+            <h2>{showBalance ? formatRupiah(totalBalance) : 'Rp••••••••'}</h2>
+            <small>{accountBalances.length} dompet aktif/terdaftar</small>
+          </div>
+          <button className="primary-btn compact" type="button" onClick={onQuickAdd}><Plus size={16} /> Catat</button>
         </div>
-        <p className={`playful-balance-amount ${!showBalance ? 'masked-balance' : ''}`}>
-          {showBalance ? formatRupiah(totalBalance) : maskMoney()}
-        </p>
-        <div className="playful-balance-metrics">
+        <div className="dashboard-stats-grid">
+          <div><span>Pemasukan bulan ini</span><strong>{formatRupiah(monthlyIncome)}</strong></div>
+          <div><span>Pengeluaran bulan ini</span><strong>{formatRupiah(monthlyExpense)}</strong></div>
+          <div><span>Net bulan ini</span><strong>{formatRupiah(monthlyIncome - monthlyExpense)}</strong></div>
+        </div>
+      </Card>
+
+      <section className="dashboard-section">
+        <div className="section-heading-row">
           <div>
-            <span>Pemasukan bulan ini</span>
-            <strong>{formatRupiah(income)}</strong>
+            <p className="section-kicker">Dompet</p>
+            <h2>Saldo per dompet</h2>
           </div>
-          <div>
-            <span>Pengeluaran bulan ini</span>
-            <strong>{formatRupiah(expense)}</strong>
-          </div>
+          <small>Klik card untuk melihat transaksi & alokasi.</small>
+        </div>
+        <div className="wallet-card-grid">
+          {accountBalances.length ? accountBalances.map((wallet) => (
+            <button className="wallet-click-card" type="button" key={wallet.id} onClick={() => openWalletDetail(wallet)}>
+              <span className="wallet-click-icon"><Wallet size={18} /></span>
+              <span>
+                <strong>{wallet.name}</strong>
+                <small>{wallet.type || 'Dompet'} • {wallet.isActive ? 'Aktif' : 'Nonaktif'}</small>
+              </span>
+              <em>{showBalance ? formatRupiah(wallet.currentBalance) : 'Rp••••••'}</em>
+            </button>
+          )) : <Card className="empty-soft-card">Belum ada dompet keluarga.</Card>}
         </div>
       </section>
 
-      <section className="playful-wallet-section">
-        <SectionHead
-          title="Saldo Dompet"
-          action={<span className="section-link">Geser untuk melihat</span>}
-        />
-        <div className="playful-wallet-carousel">
-          {activeAccounts.length === 0 ? (
-            <div className="playful-wallet-card empty-wallet">
-              <strong>Belum ada dompet aktif</strong>
-              <p>Tambahkan dompet dari halaman Profil agar saldo bisa dipantau.</p>
-            </div>
-          ) : activeAccounts.map((account) => (
-            <article className={`playful-wallet-card ${walletAccent[account.type] || 'violet'}`} key={account.id}>
-              <div className="playful-wallet-top">
-                <span className="playful-wallet-icon"><AccountIcon type={account.type} /></span>
-                <span className="wallet-type-pill">{accountTypeLabel[account.type] || 'Dompet'}</span>
-              </div>
-              <h3>{account.name}</h3>
-              <strong>{formatRupiah(account.currentBalance)}</strong>
-              <p>{account.isActive ? 'Dompet aktif keluarga' : 'Dompet nonaktif'}</p>
-            </article>
-          ))}
-        </div>
-        {activeAccounts.length > 1 && <div className="wallet-scroll-hint"><span className="active" /><span /><span /></div>}
-      </section>
-
-      <section>
-        <SectionHead
-          title="Alokasi Anggaran"
-          action={<button className="section-link" type="button" onClick={() => goTo('budgets')}>Kelola</button>}
-        />
-        <Card className="playful-budget-card">
-          <div className="playful-budget-summary">
-            <div><span>Total alokasi</span><strong>{formatRupiah(totalBudget)}</strong></div>
-            <div><span>Terpakai</span><strong>{formatRupiah(totalUsed)}</strong></div>
-            <div><span>Sisa</span><strong>{formatRupiah(totalRemaining)}</strong></div>
+      <section className="dashboard-section">
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">Alokasi Bulan Ini</p>
+            <h2>Ringkasan budget</h2>
           </div>
-
-          {budgetUsages.length === 0 ? (
-            <div className="playful-empty-inline">
-              <Target size={18} />
-              <span>Belum ada alokasi bulan ini.</span>
+          <button className="link-btn" type="button" onClick={() => onNavigate?.('budgets')}>Lihat semua</button>
+        </div>
+        <Card className="dashboard-budget-summary-card">
+          <div className="row-between">
+            <div>
+              <p className="muted tiny">Dipakai {formatRupiah(usedBudget)} dari {formatRupiah(totalBudget)}</p>
+              <h3>{overBudgetAmount > 0 ? `Over budget ${formatRupiah(overBudgetAmount)}` : `${budgetProgress}% digunakan`}</h3>
             </div>
-          ) : budgetUsages.slice(0, 3).map(({ budget, usage }) => {
-            const account = accountBalances.find((item) => item.id === budget.accountId);
-            const variant = usage.status === 'Aman' ? 'green' : usage.status === 'Mendekati' ? 'amber' : 'red';
+            <PiggyBank size={22} />
+          </div>
+          <ProgressBar value={budgetProgress} variant="orange" />
+        </Card>
+        <div className="dashboard-budget-card-grid">
+          {currentBudgets.length ? currentBudgets.map((budget) => {
+            const usage = getBudgetUsage(budget, currentMonthTransactions);
+            const wallet = accountBalances.find((account) => account.id === budget.accountId);
+            const progressRaw = budget.amount > 0 ? Math.round((usage.used / budget.amount) * 100) : 0;
+            const progress = Math.min(100, progressRaw);
+            const overBudget = Number(usage.remaining || 0) < 0;
             return (
-              <div className="budget-row playful-budget-row" key={budget.id}>
-                <div className="budget-row-header">
-                  <div>
-                    <h3>{budget.name}</h3>
-                    <p className="item-sub">{account?.name || 'Dompet'} • Sisa {formatRupiah(usage.remaining)}</p>
-                  </div>
-                  <StatusPill status={usage.status} />
-                </div>
-                <ProgressBar value={usage.percentage} variant={variant} />
-              </div>
+              <button className={`budget-click-card ${overBudget ? 'over-budget' : ''}`} type="button" key={budget.id} onClick={() => openBudgetDetail(budget)}>
+                <span>
+                  <strong>{budget.name}</strong>
+                  <small>{wallet?.name || 'Dompet tidak ditemukan'}</small>
+                </span>
+                <em className={overBudget ? 'danger' : ''}>{overBudget ? `Over ${formatRupiah(Math.abs(usage.remaining))}` : `${formatRupiah(usage.remaining)} tersisa`}</em>
+                <ProgressBar value={progress} variant="orange" />
+              </button>
             );
-          })}
+          }) : <Card className="empty-soft-card">Belum ada alokasi untuk bulan ini.</Card>}
+        </div>
+      </section>
+
+      <section className="dashboard-section">
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">Aktivitas</p>
+            <h2>Transaksi terbaru</h2>
+          </div>
+          <button className="link-btn" type="button" onClick={() => onNavigate?.('transactions')}>Semua</button>
+        </div>
+        <Card className="dashboard-activity-card">
+          {transactions.length ? transactions.slice(0, 6).map((trx) => (
+            <div className="activity-row" key={trx.id}>
+              <span className={`activity-icon ${trx.type}`}>{trx.type === 'income' ? '+' : '-'}</span>
+              <div>
+                <strong>{trx.note || (trx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')}</strong>
+                <small>{trx.transactionDate}</small>
+              </div>
+              <em className={trx.type}>{trx.type === 'income' ? '+' : '-'}{formatRupiah(trx.amount)}</em>
+            </div>
+          )) : <p className="muted tiny">Belum ada transaksi.</p>}
         </Card>
       </section>
 
-      <section className="grid-2 family-code-grid playful-info-grid">
-        <button className="glass info-glass" type="button" onClick={copyInviteCode}>
-          <p>Kode Keluarga</p>
-          <strong>{household?.inviteCode || '-'}</strong>
-          <Copy size={15} />
-        </button>
-
-        <button className="glass info-glass" type="button" onClick={() => goTo('family')}>
-          <p>Anggota</p>
-          <strong>{familyMembers.length} orang</strong>
-          <UsersRound size={15} />
-        </button>
-      </section>
-
-      <Card className="playful-section-card">
-        <SectionHead
-          title="Aktivitas Terakhir"
-          action={<button className="section-link" type="button" onClick={() => goTo('transactions')}>Lihat semua</button>}
-        />
-        <TransactionList transactions={transactions.slice(0, 3)} categories={categories} budgets={budgets} accounts={accountBalances} compact />
+      <Card className="family-mini-card">
+        <UsersRound size={18} />
+        <div>
+          <strong>{familyMembers.length} anggota keluarga</strong>
+          <small>Kode keluarga: {household?.inviteCode || '-'}</small>
+        </div>
       </Card>
+
+      <FinanceDetailModal
+        open={detail.open}
+        type={detail.type}
+        item={detail.item}
+        transactions={transactions}
+        budgets={budgets}
+        accountBalances={accountBalances}
+        onClose={closeDetail}
+      />
     </div>
   );
 }
