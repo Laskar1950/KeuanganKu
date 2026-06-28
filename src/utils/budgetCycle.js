@@ -43,6 +43,20 @@ function toDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getCycleMonthYearFromDate(dateValue = new Date()) {
+  const date = toLocalDate(dateValue);
+  let month = date.getMonth() + 1;
+  let year = date.getFullYear();
+
+  if (date.getDate() < SALARY_CYCLE_START_DAY) {
+    const previous = addMonths(year, month, -1);
+    month = previous.month;
+    year = previous.year;
+  }
+
+  return { month, year };
+}
+
 function normalizeCycleArg(monthOrCycle, year) {
   if (monthOrCycle && typeof monthOrCycle === 'object') {
     return {
@@ -58,21 +72,12 @@ function normalizeCycleArg(monthOrCycle, year) {
     };
   }
 
-  return getCurrentBudgetCycle();
+  return getCycleMonthYearFromDate();
 }
 
 export function getBudgetCycle(dateValue = new Date()) {
-  const date = toLocalDate(dateValue);
-  let month = date.getMonth() + 1;
-  let year = date.getFullYear();
-
-  if (date.getDate() < SALARY_CYCLE_START_DAY) {
-    const previous = addMonths(year, month, -1);
-    month = previous.month;
-    year = previous.year;
-  }
-
-  return getBudgetCycleRange(month, year);
+  const cycle = getCycleMonthYearFromDate(dateValue);
+  return getBudgetCycleRange(cycle.month, cycle.year);
 }
 
 export function getCurrentBudgetCycle(dateValue = new Date()) {
