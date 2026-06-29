@@ -14,6 +14,7 @@ import {
 import { calculateAccountBalance, getBudgetUsage } from '../utils/calculations.js';
 import { getBudgetCycle, getBudgetCycleTransactions } from '../utils/budgetCycle.js';
 import { formatRupiah } from '../utils/format.js';
+import { getPermissions, isManagerRole } from '../utils/permissions.js';
 
 const AppContext = createContext(null);
 
@@ -43,8 +44,25 @@ function assertOwner(member) {
 }
 
 function assertOwnerOrAdmin(member) {
-  if (!['owner', 'admin'].includes(member?.role)) {
+  if (!isManagerRole(member)) {
     throw new Error('Aksi ini hanya bisa dilakukan oleh owner atau admin keluarga.');
+  }
+}
+
+function getTransactionCreatorId(transaction) {
+  return transaction?.createdBy || transaction?.created_by || transaction?.userId || transaction?.user_id || null;
+}
+
+function assertCanUpdateTransaction(member, transaction, userId) {
+  if (!transaction) throw new Error('Transaksi tidak ditemukan.');
+  if (isManagerRole(member)) return;
+  if (getTransactionCreatorId(transaction) === userId) return;
+  throw new Error('Anda hanya bisa mengubah transaksi yang Anda buat sendiri.');
+}
+
+function assertCanDeleteTransaction(member) {
+  if (!isManagerRole(member)) {
+    throw new Error('Hanya owner atau admin yang bisa menghapus transaksi.');
   }
 }
 
@@ -558,6 +576,9 @@ export function AppProvider({ children }) {
   };
 
   const updateTransaction = async (id, payload) => {
+    const existingTransaction = state.transactions.find((item) => item.id === id);
+    assertCanUpdateTransaction(currentMember, existingTransaction, state.user?.id);
+
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal transaksi wajib lebih besar dari 0.');
     if (!payload.transactionDate) throw new Error('Tanggal transaksi wajib dipilih.');
 
@@ -604,7 +625,11 @@ export function AppProvider({ children }) {
   };
 
   const deleteTransaction = async (id) => {
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    const existingTransaction = state.transactions.find((item) => item.id === id);
+    if (!existingTransaction) throw new Error('Transaksi tidak ditemukan.');
+    assertCanDeleteTransaction(currentMember);
+
+    const { error } = await supabase.from('transactions').delete().eq('id', id).eq('family_id', state.household.id);
     if (error) throw error;
 
     await createNotification({
@@ -621,6 +646,8 @@ export function AppProvider({ children }) {
   const currentMember = useMemo(() => {
     return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
   }, [state.familyMembers, state.user?.id]);
+
+  const permissions = useMemo(() => getPermissions(currentMember), [currentMember]);
 
   const addFamilyMemberByIdentifier = async ({ identifier, role = 'member' }) => {
     assertOwnerOrAdmin(currentMember);
@@ -770,7 +797,7 @@ export function AppProvider({ children }) {
   };
 
   const addCategory = async (payload) => {
-    assertOwner(currentMember);
+    assertOwnerOrAdmin(currentMember);
     if (!payload.name?.trim()) throw new Error('Nama kategori wajib diisi.');
 
     const { data, error } = await supabase
@@ -792,7 +819,7 @@ export function AppProvider({ children }) {
   };
 
   const deleteCategory = async (id) => {
-    assertOwner(currentMember);
+    assertOwnerOrAdmin(currentMember);
     const category = state.categories.find((item) => item.id === id);
     if (!category) throw new Error('Kategori tidak ditemukan.');
     if (category.isDefault || !category.familyId) throw new Error('Kategori bawaan tidak bisa dihapus.');
@@ -810,6 +837,7 @@ export function AppProvider({ children }) {
   };
 
   const addBudget = async (payload) => {
+    assertOwnerOrAdmin(currentMember);
     if (!payload.name?.trim()) throw new Error('Nama alokasi wajib diisi.');
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal alokasi wajib lebih besar dari 0.');
     if (!payload.accountId) throw new Error('Sumber anggaran/dompet wajib dipilih.');
@@ -848,6 +876,7 @@ export function AppProvider({ children }) {
   };
 
   const updateBudget = async (id, payload) => {
+    assertOwnerOrAdmin(currentMember);
     if (!id) throw new Error('Alokasi belum dipilih.');
     if (!payload.name?.trim()) throw new Error('Nama alokasi wajib diisi.');
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error('Nominal alokasi wajib lebih besar dari 0.');
@@ -891,6 +920,7 @@ export function AppProvider({ children }) {
   };
 
   const deleteBudget = async (id) => {
+    assertOwnerOrAdmin(currentMember);
     const usedByTransactions = state.transactions.some((trx) => trx.budgetId === id);
     if (usedByTransactions) {
       throw new Error('Alokasi ini sudah dipakai transaksi. Untuk menjaga histori, sebaiknya edit nominal/catatan atau buat alokasi baru.');
@@ -911,6 +941,7 @@ export function AppProvider({ children }) {
   };
 
   const addSavingGoal = async (payload) => {
+    assertOwnerOrAdmin(currentMember);
     if (!payload.name || !payload.targetAmount) throw new Error('Nama target dan nominal target wajib diisi.');
 
     const { error } = await supabase.from('saving_goals').insert({
@@ -936,6 +967,7 @@ export function AppProvider({ children }) {
   };
 
   const depositSavingGoal = async (id, amount) => {
+    assertOwnerOrAdmin(currentMember);
     if (!id) throw new Error('Pilih target tabungan terlebih dahulu.');
     if (!amount || Number(amount) <= 0) throw new Error('Nominal setoran wajib lebih besar dari 0.');
 
@@ -977,6 +1009,7 @@ export function AppProvider({ children }) {
     loading,
     accountBalances,
     currentMember,
+    permissions,
     toast,
     notify,
     refreshData,
