@@ -9,6 +9,7 @@ import {
   Pencil,
   PiggyBank,
   Save,
+  ShieldCheck,
   Tags,
   Trash2,
   Upload,
@@ -22,11 +23,29 @@ import { useApp } from '../context/AppContext.jsx';
 import { Card, ProgressBar } from '../components/UI.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 import { formatRupiah } from '../utils/format.js';
+import '../role-management.css';
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 const accountTypeLabel = { cash: 'Cash', bank: 'Bank', ewallet: 'E-Wallet', saving: 'Tabungan', other: 'Lainnya' };
 const emptyAccountForm = { name: '', type: 'cash', initialBalance: '' };
 const emptyMemberForm = { identifier: '', role: 'member' };
+
+const roleAccessRows = [
+  { label: 'Tambah transaksi', owner: 'Ya', admin: 'Ya', member: 'Ya' },
+  { label: 'Edit transaksi sendiri', owner: 'Ya', admin: 'Ya', member: 'Ya' },
+  { label: 'Edit transaksi semua anggota', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Hapus transaksi', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Kelola dompet', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Kelola alokasi', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Kelola kategori', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Kelola target tabungan', owner: 'Ya', admin: 'Ya', member: 'Tidak' },
+  { label: 'Tambah anggota', owner: 'Admin/Member', admin: 'Member saja', member: 'Tidak' },
+  { label: 'Ubah role anggota', owner: 'Ya', admin: 'Tidak', member: 'Tidak' },
+  { label: 'Hapus anggota', owner: 'Admin/Member', admin: 'Member saja', member: 'Tidak' },
+  { label: 'Lihat laporan', owner: 'Ya', admin: 'Ya', member: 'Ya' },
+  { label: 'Ubah data keluarga', owner: 'Ya', admin: 'Tidak', member: 'Tidak' },
+];
+
 
 function initials(name = 'Pengguna') {
   return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'P';
@@ -90,6 +109,8 @@ export default function Settings() {
   const isAdmin = currentMember?.role === 'admin';
   const canManageMembers = isOwner || isAdmin;
   const canManageWallets = isOwner || isAdmin;
+  const canManageCategories = isOwner || isAdmin;
+  const canManageSavingGoals = isOwner || isAdmin;
   const incomeCategories = categories.filter((category) => category.type === 'income');
   const familyIncomeCategories = incomeCategories.filter((category) => category.familyId);
   const defaultIncomeCategories = incomeCategories.filter((category) => !category.familyId);
@@ -222,7 +243,7 @@ export default function Settings() {
       setAddingMember(true);
       const { error } = await supabase.rpc('add_family_member_by_identifier', {
         p_identifier: memberForm.identifier.trim(),
-        p_role: memberForm.role,
+        p_role: isAdmin ? 'member' : memberForm.role,
       });
       if (error) throw error;
       setMemberForm(emptyMemberForm);
@@ -239,6 +260,7 @@ export default function Settings() {
       if (isAdmin && member.role !== 'member') throw new Error('Admin tidak bisa mengubah role owner atau admin lain.');
       const nextRole = roleDrafts[member.id] || member.role;
       if (!nextRole || nextRole === 'owner') throw new Error('Role tidak valid.');
+      if (isAdmin && nextRole !== 'member') throw new Error('Admin tidak bisa mengangkat anggota menjadi admin.');
       if (nextRole === member.role) {
         notify('Role anggota tidak berubah.');
         return;
@@ -318,6 +340,7 @@ export default function Settings() {
         <p className="section-kicker">Keluarga</p>
         <div className="settings-menu-list">
           <SettingsMenuButton icon={UsersRound} title="Anggota Keluarga" description="Kelola anggota, tambah anggota, dan ubah role." badge={`${familyMembers.length} orang`} onClick={() => setActivePanel('family')} />
+          <SettingsMenuButton icon={ShieldCheck} title="Hak Akses Role" description="Lihat batas akses Owner, Admin, dan Member." onClick={() => setActivePanel('access')} />
           <SettingsMenuButton icon={Wallet} title="Dompet Keluarga" description="Kelola dompet dan saldo awal." badge={`${accountBalances.length} dompet`} onClick={() => setActivePanel('wallets')} />
         </div>
       </section>
@@ -440,7 +463,8 @@ export default function Settings() {
           {familyMembers.map((member) => {
             const isSelf = member.userId === user?.id;
             const isLockedOwner = member.role === 'owner';
-            const canActOnMember = canManageMembers && !isSelf && !isLockedOwner && (isOwner || member.role === 'member');
+            const canChangeRole = isOwner && !isSelf && !isLockedOwner;
+            const canRemoveMember = canManageMembers && !isSelf && !isLockedOwner && (isOwner || member.role === 'member');
             const isProcessing = processingMemberId === member.id;
             return (
               <div className={`member-row role-member-row ${isLockedOwner ? 'locked-owner' : ''}`} key={member.id}>
@@ -454,26 +478,31 @@ export default function Settings() {
                 <div className="role-member-actions">
                   <span className={`role-pill ${member.role}`}>{roleLabel[member.role] || member.role}</span>
 
-                  {canActOnMember && (
-                    <>
-                      <select
-                        className="role-select"
-                        value={roleDrafts[member.id] || member.role}
-                        onChange={(event) => setRoleDrafts((drafts) => ({ ...drafts, [member.id]: event.target.value }))}
-                        disabled={isProcessing}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                      <div className="role-action-row">
+                  {canChangeRole && (
+                    <select
+                      className="role-select"
+                      value={roleDrafts[member.id] || member.role}
+                      onChange={(event) => setRoleDrafts((drafts) => ({ ...drafts, [member.id]: event.target.value }))}
+                      disabled={isProcessing}
+                    >
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  )}
+
+                  {(canChangeRole || canRemoveMember) && (
+                    <div className="role-action-row">
+                      {canChangeRole && (
                         <button className="action-btn edit" type="button" onClick={() => saveMemberRole(member)} disabled={isProcessing}>
                           <Save size={12} /> Simpan
                         </button>
+                      )}
+                      {canRemoveMember && (
                         <button className="action-btn danger" type="button" onClick={() => removeMember(member)} disabled={isProcessing}>
                           <Trash2 size={12} /> Hapus
                         </button>
-                      </div>
-                    </>
+                      )}
+                    </div>
                   )}
 
                   {canManageMembers && isSelf && <p className="muted tiny role-note">Akun Anda</p>}
@@ -483,6 +512,39 @@ export default function Settings() {
               </div>
             );
           })}
+        </div>
+      </Card>
+    </>
+  );
+
+  const renderAccessPanel = () => (
+    <>
+      {renderPanelHeader('Hak Akses Role', 'Role Management')}
+      <Card className="role-access-card">
+        <div className="row-between">
+          <div>
+            <p className="section-kicker">Hak Akses</p>
+            <h2>Owner, Admin, dan Member</h2>
+          </div>
+          <span className={`role-pill ${currentMember?.role || 'member'}`}>{roleLabel[currentMember?.role] || 'Member'}</span>
+        </div>
+        <p className="muted tiny role-management-help">Hak akses dibuat tetap agar penggunaan aplikasi keluarga tetap sederhana. Owner mengatur role anggota pada menu Anggota Keluarga.</p>
+
+        <div className="role-access-table" role="table" aria-label="Hak akses role">
+          <div className="role-access-row role-access-head" role="row">
+            <span>Fitur</span>
+            <b>Owner</b>
+            <b>Admin</b>
+            <b>Member</b>
+          </div>
+          {roleAccessRows.map((item) => (
+            <div className="role-access-row" role="row" key={item.label}>
+              <span>{item.label}</span>
+              <b className={item.owner === 'Tidak' ? 'no' : 'yes'}>{item.owner}</b>
+              <b className={item.admin === 'Tidak' ? 'no' : 'yes'}>{item.admin}</b>
+              <b className={item.member === 'Tidak' ? 'no' : 'yes'}>{item.member}</b>
+            </div>
+          ))}
         </div>
       </Card>
     </>
@@ -516,10 +578,10 @@ export default function Settings() {
     <>
       {renderPanelHeader('Kategori Pemasukan', 'Keuangan')}
       <Card className="category-management-card">
-        <div className="row-between"><div><p className="section-kicker">Kategori Transaksi</p><h2>Pemasukan</h2></div>{!isOwner && <span className="role-pill member">Read only</span>}</div>
+        <div className="row-between"><div><p className="section-kicker">Kategori Transaksi</p><h2>Pemasukan</h2></div>{!canManageCategories && <span className="role-pill member">Read only</span>}</div>
         <p className="muted tiny" style={{ lineHeight: 1.6 }}>Kategori pengeluaran sudah digantikan oleh Alokasi Anggaran. Kategori di menu ini khusus untuk transaksi pemasukan.</p>
-        {isOwner && <form className="form-grid" onSubmit={submitCategory} style={{ marginTop: 14 }}><div className="field"><label>Nama kategori pemasukan</label><input value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value, type: 'income' })} placeholder="Contoh: Gaji, Bonus, Usaha" /></div><button className="secondary-btn">Tambah Kategori Pemasukan</button></form>}
-        <div className="category-section"><p className="mini-label">Kategori custom keluarga</p><div className="category-chip-grid">{familyIncomeCategories.length ? familyIncomeCategories.map((category) => <span className="category-chip income" key={category.id}>{category.name}<em>Pemasukan</em>{isOwner && <button type="button" onClick={() => deleteCategory(category.id)} aria-label="Hapus kategori"><Trash2 size={12} /></button>}</span>) : <p className="muted tiny">Belum ada kategori pemasukan custom.</p>}</div></div>
+        {canManageCategories && <form className="form-grid" onSubmit={submitCategory} style={{ marginTop: 14 }}><div className="field"><label>Nama kategori pemasukan</label><input value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value, type: 'income' })} placeholder="Contoh: Gaji, Bonus, Usaha" /></div><button className="secondary-btn">Tambah Kategori Pemasukan</button></form>}
+        <div className="category-section"><p className="mini-label">Kategori custom keluarga</p><div className="category-chip-grid">{familyIncomeCategories.length ? familyIncomeCategories.map((category) => <span className="category-chip income" key={category.id}>{category.name}<em>Pemasukan</em>{canManageCategories && <button type="button" onClick={() => deleteCategory(category.id)} aria-label="Hapus kategori"><Trash2 size={12} /></button>}</span>) : <p className="muted tiny">Belum ada kategori pemasukan custom.</p>}</div></div>
         <div className="category-section"><p className="mini-label">Kategori bawaan</p><div className="category-chip-grid compact">{defaultIncomeCategories.map((category) => <span className="category-chip readonly income" key={category.id}>{category.name}</span>)}</div></div>
       </Card>
     </>
@@ -529,10 +591,14 @@ export default function Settings() {
     <>
       {renderPanelHeader('Target Tabungan', 'Keuangan')}
       <Card>
-        <p className="section-kicker">Target Tabungan</p>
+        <div className="row-between"><p className="section-kicker">Target Tabungan</p>{!canManageSavingGoals && <span className="role-pill member">Read only</span>}</div>
         <div className="drawer-list" style={{ marginTop: 12 }}>{savingGoals.map((goal) => { const pct = Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100)); return <div className="wallet-row" key={goal.id} style={{ alignItems: 'stretch', flexDirection: 'column' }}><div className="row-between"><div><p className="item-title">{goal.name}</p><p className="item-sub">{formatRupiah(goal.currentAmount)} dari {formatRupiah(goal.targetAmount)}</p></div><strong>{pct}%</strong></div><ProgressBar value={pct} variant="green" /></div>; })}</div>
-        <form className="form-grid" onSubmit={submitDeposit} style={{ marginTop: 16 }}><div className="grid-2"><div className="field"><label>Target</label><select value={deposit.id} onChange={(event) => setDeposit({ ...deposit, id: event.target.value })}><option value="">Pilih</option>{savingGoals.map((goal) => <option value={goal.id} key={goal.id}>{goal.name}</option>)}</select></div><div className="field"><label>Setoran</label><input type="number" value={deposit.amount} onChange={(event) => setDeposit({ ...deposit, amount: event.target.value })} /></div></div><button className="secondary-btn">Tambah Setoran</button></form>
-        <form className="form-grid" onSubmit={submitGoal} style={{ marginTop: 18 }}><div className="field"><label>Nama target baru</label><input value={goalForm.name} onChange={(event) => setGoalForm({ ...goalForm, name: event.target.value })} placeholder="Contoh: Dana darurat" /></div><div className="grid-2"><div className="field"><label>Nominal target</label><input type="number" value={goalForm.targetAmount} onChange={(event) => setGoalForm({ ...goalForm, targetAmount: event.target.value })} /></div><div className="field"><label>Terkumpul</label><input type="number" value={goalForm.currentAmount} onChange={(event) => setGoalForm({ ...goalForm, currentAmount: event.target.value })} /></div></div><button className="secondary-btn">Buat Target Tabungan</button></form>
+        {canManageSavingGoals ? (
+          <>
+            <form className="form-grid" onSubmit={submitDeposit} style={{ marginTop: 16 }}><div className="grid-2"><div className="field"><label>Target</label><select value={deposit.id} onChange={(event) => setDeposit({ ...deposit, id: event.target.value })}><option value="">Pilih</option>{savingGoals.map((goal) => <option value={goal.id} key={goal.id}>{goal.name}</option>)}</select></div><div className="field"><label>Setoran</label><input type="number" value={deposit.amount} onChange={(event) => setDeposit({ ...deposit, amount: event.target.value })} /></div></div><button className="secondary-btn">Tambah Setoran</button></form>
+            <form className="form-grid" onSubmit={submitGoal} style={{ marginTop: 18 }}><div className="field"><label>Nama target baru</label><input value={goalForm.name} onChange={(event) => setGoalForm({ ...goalForm, name: event.target.value })} placeholder="Contoh: Dana darurat" /></div><div className="grid-2"><div className="field"><label>Nominal target</label><input type="number" value={goalForm.targetAmount} onChange={(event) => setGoalForm({ ...goalForm, targetAmount: event.target.value })} /></div><div className="field"><label>Terkumpul</label><input type="number" value={goalForm.currentAmount} onChange={(event) => setGoalForm({ ...goalForm, currentAmount: event.target.value })} /></div></div><button className="secondary-btn">Buat Target Tabungan</button></form>
+          </>
+        ) : <p className="muted tiny owner-only-note">Hanya owner atau admin yang bisa membuat target dan menambah setoran tabungan.</p>}
       </Card>
     </>
   );
@@ -542,6 +608,7 @@ export default function Settings() {
     profile: renderProfilePanel,
     password: renderPasswordPanel,
     family: renderFamilyPanel,
+    access: renderAccessPanel,
     wallets: renderWalletPanel,
     categories: renderCategoryPanel,
     goals: renderGoalsPanel,
