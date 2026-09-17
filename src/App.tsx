@@ -5,7 +5,32 @@ import { AppProvider, useApp } from "./context/AppContext";
 import BottomNav from "./components/BottomNav";
 import TransactionSheet from "./components/TransactionSheet";
 import { GlassLoading, Toast } from "./components/UI";
+import { hasSupabaseEnv } from "./lib/supabaseClient";
 import type { Transaction } from "./types";
+
+function ConfigErrorScreen() {
+  return (
+    <div className="grid min-h-screen place-items-center p-5 [background:var(--gradient-bg)]">
+      <div className="grid w-full max-w-[430px] gap-3 rounded-[34px] border border-line-strong bg-panel-strong/90 p-6 shadow-soft backdrop-blur-xl">
+        <div className="grid size-12 place-items-center rounded-2xl text-xl font-black text-on-accent shadow-accent [background-image:var(--gradient-brand)]">
+          !
+        </div>
+        <h1 className="font-display text-2xl leading-tight tracking-tight text-ink">Konfigurasi belum lengkap</h1>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Aplikasi tidak bisa terhubung ke Supabase karena environment variable belum diisi.
+        </p>
+        <div className="grid gap-2 rounded-2xl border border-line bg-soft p-3.5 text-xs leading-relaxed font-semibold text-muted-foreground">
+          <span className="font-mono text-[11px] text-ink">VITE_SUPABASE_URL</span>
+          <span className="font-mono text-[11px] text-ink">VITE_SUPABASE_ANON_KEY</span>
+          <p className="mt-1">
+            Tambahkan keduanya di pengaturan deployment (Vercel → Settings → Environment Variables) atau file{" "}
+            <span className="font-mono text-[11px] text-ink">.env.local</span>, lalu build/deploy ulang.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
@@ -112,6 +137,8 @@ function AppContent() {
 }
 
 export default function App() {
+  if (!hasSupabaseEnv) return <ConfigErrorScreen />;
+
   return (
     <AppProvider>
       <AppContent />
