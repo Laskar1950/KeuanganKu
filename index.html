@@ -3,12 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#020617" />
-    <meta name="description" content="Family Finance Manager - web app kelola keuangan keluarga mobile friendly." />
-    <title>Family Finance Manager</title>
+    <meta name="theme-color" content="#fff7ed" />
+    <meta name="description" content="KeuanganKu - web app kelola keuangan keluarga mobile friendly." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>KeuanganKu</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('keuanganku-theme');
+          var pref = stored === 'light' || stored === 'dark' ? stored : 'system';
+          var theme = pref === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : pref;
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) { /* noop */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

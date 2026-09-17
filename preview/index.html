@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fff7ed" />
+    <title>KeuanganKu — Prototype UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="phone-frame">
+
+        <!-- ===================== AUTH ===================== -->
+        <section id="screen-auth" class="screen screen-auth active">
+          <div class="auth-soft-wrap">
+            <button class="auth-quick-theme" id="authThemeBtn" data-icon="moon" aria-label="Ganti tema"></button>
+            <section class="auth-soft-screen">
+              <div class="auth-soft-brand">
+                <div class="auth-soft-logo">K</div>
+                <div>
+                  <small>KeuanganKu</small>
+                  <strong>Keuangan Keluarga</strong>
+                </div>
+              </div>
+
+              <div class="auth-soft-copy">
+                <span>Keuangan keluarga aman terkendali dengan KeuanganKu.</span>
+                <h1 id="authTitle">Masuk dengan nyaman.</h1>
+                <p id="authDesc">Pantau dompet, alokasi, transaksi, dan laporan keluarga dari satu aplikasi yang ringan.</p>
+              </div>
+
+              <div class="auth-soft-card">
+                <form class="auth-soft-form" id="authForm">
+                  <div class="auth-form-title no-badge">
+                    <strong id="authFormTitle">Login</strong>
+                  </div>
+
+                  <div class="field auth-soft-field" id="fName" hidden>
+                    <label>Nama</label>
+                    <input id="iName" placeholder="Nama lengkap" />
+                  </div>
+
+                  <div class="field auth-soft-field" id="fUsername" hidden>
+                    <label>Username</label>
+                    <input id="iUsername" placeholder="contoh: rizki_afrizal" autocomplete="off" />
+                  </div>
+
+                  <div class="field auth-soft-field" id="fEmail" hidden>
+                    <label>Email</label>
+                    <input type="email" id="iEmail" placeholder="nama@email.com" autocomplete="off" />
+                  </div>
+
+                  <div class="field auth-soft-field" id="fIdentifier">
+                    <label id="lIdentifier">Email / Username</label>
+                    <input id="iIdentifier" placeholder="email atau username" autocomplete="off" />
+                  </div>
+
+                  <div class="field auth-soft-field auth-password-field" id="fPassword">
+                    <label>Password</label>
+                    <div class="auth-password-control">
+                      <input type="password" id="iPassword" placeholder="Minimal 6 karakter" />
+                      <button type="button" class="auth-password-toggle" id="pwToggle" aria-label="Tampilkan password"></button>
+                    </div>
+                  </div>
+
+                  <button class="auth-soft-primary" id="authSubmit" type="submit">Masuk</button>
+
+                  <div class="auth-soft-actions" id="authActions">
+                    <button type="button" class="auth-soft-link" data-auth="forgot">Lupa password?</button>
+                    <button type="button" class="auth-soft-link" data-auth="help">Butuh bantuan?</button>
+                  </div>
+
+                  <button class="auth-soft-secondary" id="authBackBtn" type="button" hidden>
+                    <span data-icon="arrow-left" data-size="15"></span> Kembali ke Login
+                  </button>
+
+                  <button class="auth-soft-register" id="authRegisterBtn" type="button" data-auth="register">
+                    <span data-icon="user-plus" data-size="15"></span> Daftar akun baru
+                  </button>
+                </form>
+
+                <div class="auth-help-panel" id="authHelp" hidden>
+                  <div class="auth-form-title no-badge"><strong>Bantuan Login</strong></div>
+                  <div class="auth-help-list">
+                    <div><span class="auth-help-icon" data-icon="mail" data-size="16"></span><p>Masuk bisa menggunakan email atau username akun.</p></div>
+                    <div><span class="auth-help-icon" data-icon="key-round" data-size="16"></span><p>Gunakan menu Lupa Password jika tidak ingat password.</p></div>
+                    <div><span class="auth-help-icon" data-icon="shield-check" data-size="16"></span><p>Jika belum punya akun, pilih Daftar akun baru.</p></div>
+                  </div>
+                  <button class="auth-soft-secondary" type="button" id="authHelpBack">
+                    <span data-icon="arrow-left" data-size="15"></span> Kembali ke Login
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING ===================== -->
+        <section id="screen-onboarding" class="screen screen-onboarding">
+          <div class="auth-wrap">
+            <div class="auth-card form-grid">
+              <div class="brand-icon" id="onboardIcon"></div>
+              <h1 class="auth-title">Setup keluarga</h1>
+              <p class="auth-sub">Buat keluarga baru sebagai owner, atau gabung ke keluarga yang sudah ada memakai kode undangan.</p>
+
+              <div class="segment enhanced">
+                <button type="button" class="active" id="modeCreateBtn">
+                  <span>Buat Keluarga</span>
+                  <small>Untuk owner</small>
+                </button>
+                <button type="button" id="modeJoinBtn">
+                  <span>Gabung</span>
+                  <small>Untuk anggota</small>
+                </button>
+              </div>
+
+              <form class="form-grid" id="createForm">
+                <div class="field">
+                  <label>Nama keluarga</label>
+                  <input placeholder="Contoh: Keluarga Rizki" />
+                </div>
+                <div class="field">
+                  <label>Nama akun/dompet awal</label>
+                  <input placeholder="Contoh: Bank Mandiri" />
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Jenis akun</label>
+                    <select>
+                      <option>Cash</option>
+                      <option>Bank</option>
+                      <option>E-Wallet</option>
+                      <option>Tabungan</option>
+                      <option>Lainnya</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Saldo awal</label>
+                    <input type="number" placeholder="0" />
+                  </div>
+                </div>
+                <button class="primary-btn" type="submit">Buat Keluarga</button>
+              </form>
+
+              <form class="form-grid" id="joinForm" hidden>
+                <div class="field">
+                  <label>Kode undangan keluarga</label>
+                  <input placeholder="Contoh: A1B2C3D4" />
+                </div>
+                <p class="muted tiny">Minta kode undangan dari owner keluarga. Setelah bergabung, transaksi yang Anda buat akan masuk ke data keluarga tersebut.</p>
+                <button class="primary-btn" type="submit">Gabung Keluarga</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== APP ===================== -->
+        <div id="screen-app" class="screen screen-app">
+          <div class="app-scroll" id="appScroll">
+
+            <!-- ---------- DASHBOARD ---------- -->
+            <div class="page dashboard-page active" id="page-dashboard">
+              <header class="header dashboard-modern-header">
+                <div class="dashboard-user-block">
+                  <div class="dashboard-user-avatar" id="dashAvatar">AR</div>
+                  <div class="brand-copy">
+                    <small>KeuanganKu</small>
+                    <strong id="dashGreeting">Halo, Afrizal</strong>
+                    <p class="item-sub" id="dashFamily">Keluarga Rizki</p>
+                  </div>
+                </div>
+                <div class="dashboard-header-actions">
+                  <button class="icon-btn" id="bellBtn" aria-label="Notifikasi">
+                    <span data-icon="bell"></span>
+                    <span class="notification-dot" id="bellDot">3</span>
+                  </button>
+                </div>
+              </header>
+
+              <div class="card dashboard-notification-panel" id="notifPanel" hidden>
+                <div class="row-between">
+                  <div>
+                    <p class="section-kicker">Notifikasi</p>
+                    <h2>Aktivitas terbaru</h2>
+                  </div>
+                  <div class="inline-actions">
+                    <button class="small-btn" type="button" id="notifAllRead">Semua dibaca</button>
+                  </div>
+                </div>
+                <div class="dashboard-notification-list" id="notifList"></div>
+              </div>
+
+              <section class="dashboard-gradient-balance-card">
+                <div class="dashboard-balance-top">
+                  <div>
+                    <p>Total Saldo Keluarga</p>
+                    <strong class="dashboard-balance-amount" id="totalBalance">Rp 15.520.000</strong>
+                  </div>
+                  <button class="balance-toggle-btn" type="button" id="balanceToggle">
+                    <span data-icon="eye-off" data-size="15"></span> Sembunyikan
+                  </button>
+                </div>
+                <div class="dashboard-balance-metrics">
+                  <div>
+                    <span>Pemasukan bulan ini</span>
+                    <strong id="monthIncome">Rp 10.700.000</strong>
+                  </div>
+                  <div>
+                    <span>Pengeluaran bulan ini</span>
+                    <strong id="monthExpense">Rp 4.610.000</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <div class="section-head">
+                  <div>
+                    <p class="section-kicker">Dompet</p>
+                    <h2>Saldo per dompet</h2>
+                  </div>
+                  <button class="section-link" type="button" data-goto-settings="wallets">Kelola</button>
+                </div>
+                <div class="playful-wallet-carousel" id="walletCarousel"></div>
+                <div class="wallet-scroll-hint"><span class="active"></span><span></span><span></span></div>
+              </section>
+
+              <section>
+                <div class="section-head">
+                  <div>
+                    <p class="section-kicker">Alokasi Periode Ini</p>
+                    <h2>Ringkasan budget</h2>
+                    <small id="cycleRange">25 Agu – 24 Sep 2026</small>
+                  </div>
+                  <button class="section-link" type="button" data-tab="budgets">Lihat semua</button>
+                </div>
+                <div class="card">
+                  <div class="playful-budget-summary" id="budgetSummary"></div>
+                  <div class="progress" id="budgetTotalProgress">
+                    <div></div>
+                  </div>
+                  <div class="dashboard-budget-rows" id="budgetRows"></div>
+                </div>
+              </section>
+
+              <section>
+                <div class="section-head">
+                  <div>
+                    <p class="section-kicker">Aktivitas</p>
+                    <h2>Transaksi terbaru</h2>
+                  </div>
+                  <button class="section-link" type="button" data-tab="transactions">Semua</button>
+                </div>
+                <div class="transaction-list" id="latestTransactions"></div>
+              </section>
+            </div>
+
+            <!-- ---------- TRANSACTIONS ---------- -->
+            <div class="page transactions-page" id="page-transactions">
+              <header class="header">
+                <div>
+                  <p class="eyebrow">Transaksi keluarga</p>
+                  <h1>Catatan Keuangan</h1>
+                </div>
+                <button class="icon-btn" type="button" id="txAddBtn" aria-label="Tambah transaksi">
+                  <span data-icon="plus"></span>
+                </button>
+              </header>
+
+              <div class="card quick-card">
+                <div class="row-between">
+                  <div>
+                    <p class="section-kicker">Input cepat</p>
+                    <h2>Catat transaksi baru</h2>
+                  </div>
+                  <span class="role-pill owner">Alokasi otomatis</span>
+                </div>
+                <p class="muted tiny quick-copy">Untuk pengeluaran, pilih alokasi anggaran. Dompet akan otomatis mengikuti sumber anggaran pada alokasi tersebut.</p>
+                <button class="primary-btn" type="button" id="txAddBtn2">
+                  <span data-icon="plus" data-size="16"></span> Tambah Transaksi
+                </button>
+              </div>
+
+              <div class="summary-grid">
+                <div class="stat-card income">
+                  <span>Pemasukan tampil</span>
+                  <strong id="txIncomeSum">Rp 0</strong>
+                </div>
+                <div class="stat-card expense">
+                  <span>Pengeluaran tampil</span>
+                  <strong id="txExpenseSum">Rp 0</strong>
+                </div>
+              </div>
+
+              <div class="row-between search-filter-row">
+                <label class="searchbar" style="flex: 1">
+                  <span data-icon="search"></span>
+                  <input id="txSearch" placeholder="Cari transaksi, alokasi, catatan, dompet..." />
+                </label>
+                <button class="icon-btn filter-icon-btn" id="txFilterBtn" aria-label="Filter transaksi">
+                  <span data-icon="filter"></span>
+                </button>
+              </div>
+
+              <div class="filter-row" id="txTypeFilter">
+                <button class="filter-chip active" data-type="all">Semua</button>
+                <button class="filter-chip income" data-type="income">Pemasukan</button>
+                <button class="filter-chip expense" data-type="expense">Pengeluaran</button>
+              </div>
+
+              <section class="advanced-filter-card" id="advancedFilter" hidden>
+                <div class="advanced-filter-head">
+                  <div>
+                    <p class="section-kicker">Filter Detail</p>
+                    <h2>Saring Transaksi</h2>
+                  </div>
+                  <button class="small-btn" type="button" id="txResetFilters">
+                    <span data-icon="rotate-ccw" data-size="13"></span> Reset
+                  </button>
+                </div>
+                <div class="form-grid">
+                  <div class="grid-2">
+                    <div class="field"><label>Anggota</label><select id="fCreator"><option value="all">Semua anggota</option></select></div>
+                    <div class="field"><label>Dompet</label><select id="fWallet"><option value="all">Semua dompet</option></select></div>
+                  </div>
+                  <div class="grid-2">
+                    <div class="field"><label>Alokasi Pengeluaran</label><select id="fBudget"><option value="all">Semua alokasi</option></select></div>
+                    <div class="field"><label>Kategori Pemasukan</label><select id="fCategory"><option value="all">Semua kategori</option></select></div>
+                  </div>
+                  <div class="grid-2">
+                    <div class="field"><label>Dari tanggal</label><input type="date" id="fStart" /></div>
+                    <div class="field"><label>Sampai tanggal</label><input type="date" id="fEnd" /></div>
+                  </div>
+                </div>
+                <p class="muted tiny filter-result-note" id="txResultNote"></p>
+              </section>
+
+              <section class="transactions-list-card">
+                <div class="transaction-list" id="txList"></div>
+              </section>
+            </div>
+
+            <!-- ---------- BUDGETS ---------- -->
+            <div class="page budget-page" id="page-budgets">
+              <header class="salary-budget-hero">
+                <div>
+                  <p class="eyebrow">Alokasi Anggaran</p>
+                  <h1>Budget keluarga</h1>
+                  <small>Budget otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
+                </div>
+                <button class="salary-budget-add-btn" type="button" id="budgetAddBtn">
+                  <span data-icon="plus" data-size="18"></span> Tambah
+                </button>
+              </header>
+
+              <section class="salary-cycle-panel">
+                <div class="salary-cycle-top">
+                  <div>
+                    <p class="section-kicker">Periode aktif</p>
+                    <h2 id="cycleLabel">Agustus - September 2026</h2>
+                    <small id="cycleRange2">25 Agu – 24 Sep 2026</small>
+                  </div>
+                  <div class="salary-cycle-selectors">
+                    <label><span>Bulan</span><select id="cycleMonth"></select><span class="chevron" data-icon="chevron-down" data-size="16"></span></label>
+                    <label><span>Tahun</span><input type="number" id="cycleYear" value="2026" /></label>
+                  </div>
+                </div>
+                <div class="salary-budget-stat-grid" id="budgetStats"></div>
+                <div class="salary-progress-wrap">
+                  <div class="progress" id="budgetCycleProgress"><div></div></div>
+                  <small id="budgetCycleNote"></small>
+                </div>
+              </section>
+
+              <div class="card salary-budget-form-card" id="budgetFormCard" hidden>
+                <div class="salary-form-header">
+                  <div>
+                    <p class="section-kicker" id="budgetFormKicker">Alokasi baru</p>
+                    <h2 id="budgetFormTitle">Tambah alokasi</h2>
+                    <small id="budgetFormPeriod">Periode form: 25 Agu – 24 Sep 2026</small>
+                  </div>
+                  <button class="icon-btn" type="button" id="budgetFormClose" aria-label="Tutup form alokasi">
+                    <span data-icon="x"></span>
+                  </button>
+                </div>
+                <form class="salary-budget-form" id="budgetForm">
+                  <div class="field"><label>Nama alokasi</label><input id="bfName" placeholder="Contoh: Belanja rumah" /></div>
+                  <div class="grid-2">
+                    <div class="field"><label>Nominal</label><input type="number" min="1" id="bfAmount" placeholder="Contoh: 1000000" /></div>
+                    <div class="field"><label>Sumber dompet</label><select id="bfWallet"></select></div>
+                  </div>
+                  <div class="grid-2">
+                    <div class="field"><label>Bulan periode</label><select id="bfMonth"></select></div>
+                    <div class="field"><label>Tahun</label><input type="number" id="bfYear" value="2026" /></div>
+                  </div>
+                  <div class="field"><label>Keterangan</label><textarea id="bfNote" placeholder="Opsional"></textarea></div>
+                  <div class="salary-form-actions">
+                    <button class="secondary-btn" type="button" id="budgetFormCancel">Batal</button>
+                    <button class="primary-btn" type="submit">Simpan Alokasi</button>
+                  </div>
+                </form>
+              </div>
+
+              <section class="salary-budget-list-section">
+                <div class="section-heading-row">
+                  <div>
+                    <p class="section-kicker">Daftar Alokasi</p>
+                    <h2 id="budgetCount">4 alokasi</h2>
+                  </div>
+                  <small>Klik card untuk melihat transaksi periode ini.</small>
+                </div>
+                <div class="salary-budget-card-list" id="budgetCards"></div>
+              </section>
+            </div>
+
+            <!-- ---------- REPORTS ---------- -->
+            <div class="page reports-basic-page" id="page-reports">
+              <section class="reports-basic-header">
+                <div>
+                  <p>Laporan Keuangan</p>
+                  <h1>Ringkasan laporan</h1>
+                  <span id="repCycleRange">Periode gajian: 25 Agu – 24 Sep 2026</span>
+                </div>
+                <div class="reports-basic-net is-plus" id="repNet">
+                  <small>Net periode</small>
+                  <strong id="repNetVal">Rp 6.090.000</strong>
+                  <span id="repNetCount">8 transaksi</span>
+                </div>
+              </section>
+
+              <section class="reports-basic-card">
+                <div class="reports-basic-card-title">
+                  <div>
+                    <h2>Filter laporan</h2>
+                    <p>Pilih periode, dompet, atau alokasi tertentu.</p>
+                  </div>
+                  <button type="button" id="repReset">Reset</button>
+                </div>
+                <div class="reports-basic-filter-grid">
+                  <label>Bulan<select id="repMonth"></select></label>
+                  <label>Tahun<select id="repYear"></select></label>
+                  <label>Dompet<select id="repWallet"></select></label>
+                  <label>Alokasi<select id="repBudget"></select></label>
+                </div>
+              </section>
+
+              <section class="reports-basic-summary-grid" id="repSummary"></section>
+
+              <section class="reports-basic-card">
+                <div class="reports-basic-card-title">
+                  <div><h2>Penggunaan alokasi</h2><p>Ringkasan pemakaian alokasi pada periode ini.</p></div>
+                </div>
+                <div class="reports-basic-allocation-list" id="repAllocations"></div>
+              </section>
+
+              <section class="reports-basic-card">
+                <div class="reports-basic-card-title">
+                  <div><h2>Transaksi periode ini</h2><p>Daftar transaksi terbaru sesuai filter laporan.</p></div>
+                </div>
+                <div class="reports-basic-transaction-list" id="repTransactions"></div>
+              </section>
+            </div>
+
+            <!-- ---------- SETTINGS: MENU ---------- -->
+            <div class="page settings-menu-page active" id="page-settings-menu">
+              <header class="header">
+                <div>
+                  <p class="eyebrow">Pengaturan</p>
+                  <h1>Profil & Keluarga</h1>
+                </div>
+                <button class="icon-btn" type="button" id="logoutBtn" aria-label="Logout">
+                  <span data-icon="logout"></span>
+                </button>
+              </header>
+
+              <div class="card settings-profile-summary">
+                <div class="profile-hero-top">
+                  <div class="profile-avatar large">AR</div>
+                  <div class="profile-hero-info">
+                    <p class="section-kicker">Akun aktif</p>
+                    <h2>Afrizal Rizki</h2>
+                    <p class="muted tiny">afrizal@email.com</p>
+                    <p class="muted tiny">@rizki_afrizal</p>
+                    <span class="role-pill owner">Owner</span>
+                  </div>
+                </div>
+              </div>
+
+              <section class="settings-menu-section">
+                <p class="section-kicker">Profil Saya</p>
+                <div class="settings-menu-list">
+                  <button class="settings-menu-button" type="button" data-panel="profile">
+                    <span class="settings-menu-icon" data-icon="user-round"></span>
+                    <span class="settings-menu-copy"><strong>Profil Akun</strong><small>Ubah nama dan foto profil.</small></span>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                  <button class="settings-menu-button" type="button" data-panel="password">
+                    <span class="settings-menu-icon" data-icon="key-round"></span>
+                    <span class="settings-menu-copy"><strong>Ganti Password</strong><small>Perbarui password login akun.</small></span>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="settings-menu-section">
+                <p class="section-kicker">Tampilan</p>
+                <div class="card settings-theme-card">
+                  <div class="settings-theme-head">
+                    <span class="settings-menu-icon" data-icon="palette"></span>
+                    <div class="settings-menu-copy"><strong>Tema Aplikasi</strong><small>Pilih terang, gelap, atau ikuti sistem.</small></div>
+                  </div>
+                  <div class="segment theme-segment">
+                    <button type="button" data-theme="auto" class="active"><span data-icon="palette" data-size="17"></span><small>Otomatis</small></button>
+                    <button type="button" data-theme="light"><span data-icon="sun" data-size="17"></span><small>Terang</small></button>
+                    <button type="button" data-theme="dark"><span data-icon="moon" data-size="17"></span><small>Gelap</small></button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-menu-section">
+                <p class="section-kicker">Keluarga</p>
+                <div class="settings-menu-list">
+                  <button class="settings-menu-button" type="button" data-panel="family">
+                    <span class="settings-menu-icon" data-icon="users-round"></span>
+                    <span class="settings-menu-copy"><strong>Anggota Keluarga</strong><small>Kelola anggota, tambah anggota, dan ubah role.</small></span>
+                    <em class="settings-badge">3 orang</em>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                  <button class="settings-menu-button" type="button" data-panel="access">
+                    <span class="settings-menu-icon" data-icon="shield-check"></span>
+                    <span class="settings-menu-copy"><strong>Hak Akses Role</strong><small>Lihat batas akses Owner, Admin, dan Member.</small></span>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                  <button class="settings-menu-button" type="button" data-panel="wallets">
+                    <span class="settings-menu-icon" data-icon="wallet"></span>
+                    <span class="settings-menu-copy"><strong>Dompet Keluarga</strong><small>Kelola dompet dan saldo awal.</small></span>
+                    <em class="settings-badge">5 dompet</em>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="settings-menu-section">
+                <p class="section-kicker">Keuangan</p>
+                <div class="settings-menu-list">
+                  <button class="settings-menu-button" type="button" data-panel="categories">
+                    <span class="settings-menu-icon" data-icon="tags"></span>
+                    <span class="settings-menu-copy"><strong>Kategori Pemasukan</strong><small>Kategori untuk transaksi pemasukan.</small></span>
+                    <em class="settings-badge">3 kategori</em>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                  <button class="settings-menu-button" type="button" data-panel="goals">
+                    <span class="settings-menu-icon" data-icon="piggy-bank"></span>
+                    <span class="settings-menu-copy"><strong>Target Tabungan</strong><small>Kelola target dan setoran tabungan.</small></span>
+                    <em class="settings-badge">3 target</em>
+                    <span class="settings-chevron" data-icon="chevron-right" data-size="17"></span>
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <!-- ---------- SETTINGS: PROFILE ---------- -->
+            <div class="page settings-sub-page" id="page-settings-profile">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Profil Saya</p><h1>Profil Akun</h1></div>
+              </header>
+              <div class="card">
+                <div class="profile-hero-top">
+                  <div class="avatar-upload-wrap">
+                    <div class="profile-avatar large">AR</div>
+                    <button class="avatar-upload-btn" type="button" aria-label="Upload foto profil"><span data-icon="camera" data-size="16"></span></button>
+                  </div>
+                  <div class="profile-hero-info">
+                    <p class="section-kicker">Informasi Akun</p>
+                    <h2>Afrizal Rizki</h2>
+                    <p class="muted tiny">afrizal@email.com</p>
+                    <p class="muted tiny">@rizki_afrizal</p>
+                    <span class="role-pill owner">Owner</span>
+                  </div>
+                </div>
+                <form class="form-grid profile-edit-form">
+                  <div class="field"><label>Nama profil</label><input value="Afrizal Rizki" /></div>
+                  <div class="field"><label>Email</label><input value="afrizal@email.com" disabled /></div>
+                  <div class="field"><label>Username</label><input value="@rizki_afrizal" disabled /></div>
+                  <div class="field"><label>Foto profil</label><button class="upload-photo-btn" type="button"><span data-icon="upload" data-size="16"></span> Pilih Foto dari Perangkat</button></div>
+                  <p class="muted tiny">Format yang didukung: JPG, PNG, WEBP, atau GIF. Maksimal 5MB.</p>
+                  <button class="primary-btn" type="submit"><span data-icon="save" data-size="16"></span> Simpan Profil</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: PASSWORD ---------- -->
+            <div class="page settings-sub-page" id="page-settings-password">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Keamanan</p><h1>Ganti Password</h1></div>
+              </header>
+              <div class="card">
+                <p class="section-kicker">Keamanan Akun</p>
+                <h2>Password Login</h2>
+                <p class="muted tiny password-help">Gunakan password minimal 6 karakter agar akun tetap aman.</p>
+                <form class="form-grid">
+                  <div class="field"><label>Password baru</label><input type="password" placeholder="Masukkan password baru" /></div>
+                  <div class="field"><label>Konfirmasi password</label><input type="password" placeholder="Ulangi password baru" /></div>
+                  <button class="secondary-btn password-submit-btn" type="submit"><span data-icon="key-round" data-size="16"></span> Ganti Password</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: FAMILY ---------- -->
+            <div class="page settings-sub-page" id="page-settings-family">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Keluarga</p><h1>Anggota Keluarga</h1></div>
+              </header>
+
+              <div class="card family-overview-card">
+                <div class="family-cover-row">
+                  <div class="family-stack-avatars" id="familyStack"></div>
+                  <div class="family-overview-text">
+                    <p class="section-kicker">Keluarga</p>
+                    <h2>Keluarga Rizki</h2>
+                    <p class="muted tiny">3 anggota tergabung</p>
+                  </div>
+                </div>
+                <div class="invite-box family-invite-box">
+                  <div><p class="mini-label">Kode undangan keluarga</p><strong>A1B2C3D4</strong></div>
+                  <button class="small-btn" type="button" id="copyInviteBtn"><span data-icon="copy" data-size="14"></span> Salin</button>
+                </div>
+              </div>
+
+              <div class="card add-member-card">
+                <div class="row-between">
+                  <div><p class="section-kicker">Role Management</p><h2>Tambah Anggota</h2></div>
+                  <span class="role-pill owner">Owner</span>
+                </div>
+                <p class="muted tiny role-management-help">Owner dapat menambahkan anggota sebagai admin atau member. Admin dapat menambahkan anggota sebagai member dan mengelola anggota yang bukan owner/admin.</p>
+                <form class="form-grid add-member-form">
+                  <div class="field"><label>Email atau Username</label><input placeholder="contoh: anggota@email.com atau username" /></div>
+                  <div class="field"><label>Role</label><select><option>Member</option><option>Admin</option></select></div>
+                  <button class="secondary-btn" type="submit"><span data-icon="user-plus" data-size="16"></span> Tambah Anggota</button>
+                </form>
+              </div>
+
+              <div class="card family-members-card">
+                <div class="row-between">
+                  <div><p class="section-kicker">Daftar Anggota</p><h2>3 Anggota</h2></div>
+                  <span class="role-pill owner">Owner</span>
+                </div>
+                <div class="drawer-list role-member-list" id="memberList"></div>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: ACCESS ---------- -->
+            <div class="page settings-sub-page" id="page-settings-access">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Role Management</p><h1>Hak Akses Role</h1></div>
+              </header>
+              <div class="card">
+                <div class="row-between">
+                  <div><p class="section-kicker">Hak Akses</p><h2>Owner, Admin, dan Member</h2></div>
+                  <span class="role-pill owner">Owner</span>
+                </div>
+                <p class="muted tiny role-management-help">Hak akses dibuat tetap agar penggunaan aplikasi keluarga tetap sederhana. Owner mengatur role anggota pada menu Anggota Keluarga.</p>
+                <div class="role-access-table">
+                  <div class="role-access-row role-access-head"><span>Fitur</span><b>Owner</b><b>Admin</b><b>Member</b></div>
+                  <div class="role-access-row"><span>Tambah transaksi</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="yes">Ya</b></div>
+                  <div class="role-access-row"><span>Edit transaksi sendiri</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="yes">Ya</b></div>
+                  <div class="role-access-row"><span>Edit transaksi semua anggota</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Hapus transaksi</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Kelola dompet</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Kelola alokasi</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Kelola kategori</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Kelola target tabungan</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Tambah anggota</span><b class="yes">Admin/Member</b><b class="yes">Member saja</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Ubah role anggota</span><b class="yes">Ya</b><b class="no">Tidak</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Hapus anggota</span><b class="yes">Admin/Member</b><b class="yes">Member saja</b><b class="no">Tidak</b></div>
+                  <div class="role-access-row"><span>Lihat laporan</span><b class="yes">Ya</b><b class="yes">Ya</b><b class="yes">Ya</b></div>
+                  <div class="role-access-row"><span>Ubah data keluarga</span><b class="yes">Ya</b><b class="no">Tidak</b><b class="no">Tidak</b></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: WALLETS ---------- -->
+            <div class="page settings-sub-page" id="page-settings-wallets">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Keuangan</p><h1>Dompet Keluarga</h1></div>
+              </header>
+              <div class="card">
+                <div class="row-between"><div><p class="section-kicker">Akun & Dompet</p><h2>Kelola Dompet</h2></div></div>
+                <div class="drawer-list" id="walletManageList" style="margin-top: 12px"></div>
+                <form class="form-grid" style="margin-top: 16px">
+                  <p class="section-kicker">Tambah Dompet</p>
+                  <div class="field"><label>Nama akun/dompet</label><input placeholder="Contoh: Bank Mandiri" /></div>
+                  <div class="grid-2">
+                    <div class="field"><label>Jenis</label><select><option>Cash</option><option>Bank</option><option>E-Wallet</option><option>Tabungan</option><option>Lainnya</option></select></div>
+                    <div class="field"><label>Saldo awal</label><input type="number" /></div>
+                  </div>
+                  <button class="secondary-btn" type="submit">Tambah Akun/Dompet</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: CATEGORIES ---------- -->
+            <div class="page settings-sub-page" id="page-settings-categories">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Keuangan</p><h1>Kategori Pemasukan</h1></div>
+              </header>
+              <div class="card">
+                <div class="row-between"><div><p class="section-kicker">Kategori Transaksi</p><h2>Pemasukan</h2></div></div>
+                <p class="muted tiny" style="line-height: 1.6">Kategori pengeluaran sudah digantikan oleh Alokasi Anggaran. Kategori di menu ini khusus untuk transaksi pemasukan.</p>
+                <form class="form-grid" style="margin-top: 14px">
+                  <div class="field"><label>Nama kategori pemasukan</label><input placeholder="Contoh: Gaji, Bonus, Usaha" /></div>
+                  <button class="secondary-btn" type="submit">Tambah Kategori Pemasukan</button>
+                </form>
+                <div class="category-section"><p class="mini-label">Kategori custom keluarga</p><div class="category-chip-grid" id="categoryCustom"></div></div>
+                <div class="category-section"><p class="mini-label">Kategori bawaan</p><div class="category-chip-grid compact" id="categoryDefault"></div></div>
+              </div>
+            </div>
+
+            <!-- ---------- SETTINGS: GOALS ---------- -->
+            <div class="page settings-sub-page" id="page-settings-goals">
+              <header class="header settings-panel-header">
+                <button class="icon-btn" type="button" data-back-menu aria-label="Kembali"><span data-icon="chevron-left"></span></button>
+                <div><p class="eyebrow">Keuangan</p><h1>Target Tabungan</h1></div>
+              </header>
+              <div class="card">
+                <p class="section-kicker">Target Tabungan</p>
+                <div class="drawer-list" id="goalList" style="margin-top: 12px"></div>
+                <form class="form-grid" style="margin-top: 16px">
+                  <div class="grid-2">
+                    <div class="field"><label>Target</label><select id="goalSelect"></select></div>
+                    <div class="field"><label>Setoran</label><input type="number" placeholder="Nominal" /></div>
+                  </div>
+                  <button class="secondary-btn" type="submit">Tambah Setoran</button>
+                </form>
+                <form class="form-grid" style="margin-top: 18px">
+                  <div class="field"><label>Nama target baru</label><input placeholder="Contoh: Dana darurat" /></div>
+                  <div class="grid-2">
+                    <div class="field"><label>Nominal target</label><input type="number" /></div>
+                    <div class="field"><label>Terkumpul</label><input type="number" /></div>
+                  </div>
+                  <button class="secondary-btn" type="submit">Buat Target Tabungan</button>
+                </form>
+              </div>
+            </div>
+
+          </div>
+
+          <button class="fab" id="fabBtn" aria-label="Tambah transaksi"><span data-icon="plus" data-size="28"></span></button>
+
+          <nav class="bottom-nav" id="bottomNav" aria-label="Navigasi utama">
+            <button class="nav-btn active" type="button" data-tab="dashboard"><span data-icon="home" data-size="18"></span><span>Home</span></button>
+            <button class="nav-btn" type="button" data-tab="transactions"><span data-icon="receipt-text" data-size="18"></span><span>Catat</span></button>
+            <button class="nav-btn" type="button" data-tab="budgets"><span data-icon="target" data-size="18"></span><span>Budget</span></button>
+            <button class="nav-btn" type="button" data-tab="reports"><span data-icon="chart" data-size="18"></span><span>Laporan</span></button>
+            <button class="nav-btn" type="button" data-tab="settings"><span data-icon="settings" data-size="18"></span><span>Profil</span></button>
+          </nav>
+        </div>
+
+        <!-- ===================== MODAL: TRANSACTION SHEET ===================== -->
+        <div class="sheet-backdrop" id="sheetBackdrop" hidden>
+          <form class="sheet form-grid" id="transactionSheet">
+            <div class="row-between">
+              <div>
+                <p class="section-kicker">Transaksi</p>
+                <h2 id="sheetTitle">Catat cepat</h2>
+              </div>
+              <button type="button" class="icon-btn" id="sheetClose" aria-label="Tutup form"><span data-icon="x"></span></button>
+            </div>
+
+            <div class="segment" id="sheetType">
+              <button type="button" class="active income" data-stype="income">Pemasukan</button>
+              <button type="button" data-stype="expense">Pengeluaran</button>
+            </div>
+
+            <div class="field">
+              <label>Nominal</label>
+              <input inputmode="numeric" type="number" min="1" placeholder="Contoh: 150000" />
+            </div>
+
+            <div class="field allocation-field" id="sheetAllocationField">
+              <label>Alokasi Anggaran</label>
+              <button type="button" class="allocation-select-button" id="allocationSelectBtn">
+                <span>
+                  <strong>Pilih alokasi</strong>
+                  <small id="allocSelectSub">4 alokasi tersedia · 25 Agu – 24 Sep 2026</small>
+                </span>
+                <em>Pilih</em>
+              </button>
+              <p class="budget-hint" id="allocationHint">Pengeluaran wajib memilih alokasi. Daftar mengikuti periode gajian: tanggal 25 sampai 24 bulan berikutnya.</p>
+            </div>
+
+            <div class="grid-2" id="sheetIncomeFields">
+              <div class="field">
+                <label>Kategori Pemasukan</label>
+                <select id="sheetCategory"></select>
+                <button class="inline-add-btn" type="button"><span data-icon="plus-circle" data-size="14"></span> Tambah kategori pemasukan</button>
+              </div>
+              <div class="field">
+                <label>Dompet Tujuan</label>
+                <select id="sheetWallet"></select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Tanggal</label>
+              <input type="date" id="sheetDate" />
+            </div>
+
+            <div class="field">
+              <label>Catatan</label>
+              <textarea id="sheetNote" placeholder="Opsional"></textarea>
+            </div>
+
+            <button class="primary-btn" type="submit">Simpan Transaksi</button>
+          </form>
+        </div>
+
+        <!-- ===================== MODAL: ALLOCATION PICKER ===================== -->
+        <div class="allocation-picker-backdrop" id="allocationBackdrop" hidden>
+          <section class="allocation-picker-sheet">
+            <div class="allocation-picker-header">
+              <div>
+                <p class="section-kicker">Pilih alokasi</p>
+                <h3>Periode gajian 09/2026</h3>
+                <small>25 Agu – 24 Sep 2026 · 4 alokasi tersedia.</small>
+              </div>
+              <button type="button" class="icon-btn" id="allocClose" aria-label="Tutup pilihan alokasi"><span data-icon="x"></span></button>
+            </div>
+            <label class="allocation-search-box">
+              <span data-icon="search" data-size="17"></span>
+              <input id="allocSearch" placeholder="Cari nama alokasi atau dompet..." />
+            </label>
+            <div class="allocation-picker-list" id="allocList"></div>
+          </section>
+        </div>
+
+        <!-- ===================== MODAL: FINANCE DETAIL ===================== -->
+        <div class="detail-backdrop" id="detailBackdrop" hidden>
+          <section class="detail-sheet" id="detailSheet"></section>
+        </div>
+
+        <!-- ===================== TOAST ===================== -->
+        <div class="toast" id="toast" hidden></div>
+
+      </div>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

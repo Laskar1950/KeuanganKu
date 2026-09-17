@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789404662455,
+      "tag": "20260914165102_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789404893608,
+      "tag": "20260914165453_triggers_storage_realtime_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789482076133,
+      "tag": "20260915142116_username_availability",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789485328927,
+      "tag": "20260915151528_reconcile_live_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789613300936,
+      "tag": "20260917024820_account_balances_rpc",
+      "breakpoints": true
+    }
+  ]
+}

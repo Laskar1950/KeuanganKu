@@ -13,21 +13,24 @@ Di Supabase Dashboard:
 
 ## B. Database Migration
 
-Jalankan migration berikut:
+Database dikelola penuh oleh Drizzle. Jalankan:
 
-```txt
-supabase/migrations/20260524000100_initial_schema.sql
+```bash
+npm run db:migrate
 ```
 
-Migration ini akan membuat:
+Perintah ini membuat:
 
 - enum role, account type, transaction type, saving goal status
-- semua tabel MVP
+- semua tabel MVP + constraint + index
+- 35 RLS policy + `ENABLE ROW LEVEL SECURITY`
+- function (termasuk RPC onboarding, join keluarga, role management)
+- trigger profile saat user baru dibuat dan trigger `updated_at`
+- storage bucket `avatars` + policy-nya
+- realtime publication + replica identity
 - default kategori pemasukan/pengeluaran
-- trigger profile saat user baru dibuat
-- trigger `updated_at`
-- index dasar
-- Row Level Security policies
+
+Jika database sudah terisi dari file SQL lama di `supabase/legacy/`, jalankan `npm run db:baseline` sebelum `npm run db:migrate`.
 
 ## C. Row Level Security
 
@@ -45,7 +48,10 @@ Buat `.env.local`:
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+DATABASE_URL=postgresql://postgres.[project-ref]:[password]@[host]:5432/postgres
 ```
+
+`DATABASE_URL` diambil dari Supabase Dashboard > Connect > Session pooler dan hanya dipakai oleh Drizzle CLI.
 
 Jangan commit `.env.local` ke GitHub.
 

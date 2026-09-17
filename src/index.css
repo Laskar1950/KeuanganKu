@@ -1,0 +1,171 @@
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source "./";
+
+@custom-variant dark ([data-theme="dark"] &);
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-panel-solid: var(--panel-solid);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--soft);
+  --color-muted-foreground: var(--muted);
+  --color-on-accent: var(--on-accent);
+
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel-solid);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel-solid);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--rose-strong);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--soft);
+  --color-secondary-foreground: var(--ink);
+  --color-accent: var(--soft);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: var(--on-accent);
+  --color-border: var(--line);
+  --color-input: var(--field-border);
+  --color-ring: var(--rose-strong);
+
+  --color-rose: var(--rose);
+  --color-rose-strong: var(--rose-strong);
+  --color-rose-dark: var(--rose-dark);
+  --color-rose-bg: var(--rose-bg);
+  --color-rose-border: var(--rose-border);
+  --color-orange: var(--orange);
+  --color-orange-dark: var(--orange-dark);
+  --color-orange-bg: var(--orange-bg);
+  --color-orange-border: var(--orange-border);
+  --color-green: var(--green);
+  --color-green-bg: var(--green-bg);
+  --color-green-border: var(--green-border);
+  --color-red: var(--red);
+  --color-red-bg: var(--red-bg);
+  --color-red-border: var(--red-border);
+  --color-amber: var(--amber);
+  --color-amber-bg: var(--amber-bg);
+  --color-blue: var(--blue);
+  --color-blue-bg: var(--blue-bg);
+  --color-violet: var(--violet);
+  --color-violet-bg: var(--violet-bg);
+  --color-teal: var(--teal);
+
+  --color-field-bg: var(--field-bg);
+  --color-field-border: var(--field-border);
+  --color-sheet-bg: var(--sheet-bg);
+  --color-sheet-border: var(--sheet-border);
+  --color-nav-bg: var(--nav-bg);
+  --color-nav-border: var(--nav-border);
+  --color-chip-bg: var(--chip-bg);
+  --color-chip-border: var(--chip-border);
+  --color-toast-bg: var(--toast-bg);
+  --color-toast-ink: var(--toast-ink);
+  --color-backdrop: var(--backdrop);
+  --color-skeleton-base: var(--skeleton-base);
+  --color-skeleton-shine: var(--skeleton-shine);
+
+  --shadow-soft: var(--shadow);
+  --shadow-soft-hover: var(--shadow-hover);
+  --shadow-accent: var(--accent-glow);
+
+  --font-display: "Bricolage Grotesque Variable", "Plus Jakarta Sans Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--gradient-bg);
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  p {
+    line-height: 1.5;
+  }
+
+  strong {
+    font-weight: 800;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin-top: 0;
+  }
+
+  h1 {
+    margin-bottom: 0;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: clamp(22px, 6.4vw, 28px);
+    line-height: 1.1;
+    letter-spacing: -0.045em;
+  }
+
+  h2 {
+    margin-bottom: 0;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: clamp(17px, 4.6vw, 20px);
+    line-height: 1.18;
+    letter-spacing: -0.03em;
+  }
+
+  h3 {
+    margin-bottom: 0;
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:not(:disabled) {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease,
+      color 0.18s ease, opacity 0.18s ease;
+  }
+
+  button:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+
+  @media (hover: none) {
+    button:not(:disabled):hover {
+      transform: none;
+    }
+
+    button:not(:disabled):active {
+      transform: scale(0.98);
+    }
+  }
+}

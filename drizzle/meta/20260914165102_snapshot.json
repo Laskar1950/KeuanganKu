@@ -1,0 +1,1662 @@
+{
+  "id": "f47dad39-9da6-46d3-aa8c-995db473b12c",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.accounts": {
+      "name": "accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "account_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'cash'"
+        },
+        "initial_balance": {
+          "name": "initial_balance",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "accounts_family_id_idx": {
+          "name": "accounts_family_id_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "accounts_family_id_fkey": {
+          "name": "accounts_family_id_fkey",
+          "tableFrom": "accounts",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "accounts_select_member": {
+          "name": "accounts_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"accounts\".\"family_id\")"
+        },
+        "accounts_insert_manager": {
+          "name": "accounts_insert_manager",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "public.is_family_admin_or_owner(\"accounts\".\"family_id\")"
+        },
+        "accounts_update_manager": {
+          "name": "accounts_update_manager",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"accounts\".\"family_id\")",
+          "withCheck": "public.is_family_admin_or_owner(\"accounts\".\"family_id\")"
+        },
+        "accounts_delete_manager": {
+          "name": "accounts_delete_manager",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"accounts\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {
+        "accounts_name_check": {
+          "name": "accounts_name_check",
+          "value": "length(btrim(\"accounts\".\"name\")) > 0"
+        },
+        "accounts_initial_balance_check": {
+          "name": "accounts_initial_balance_check",
+          "value": "\"accounts\".\"initial_balance\" >= 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.budgets": {
+      "name": "budgets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "month": {
+          "name": "month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "budgets_family_month_year_idx": {
+          "name": "budgets_family_month_year_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "month",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "budgets_account_id_idx": {
+          "name": "budgets_account_id_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "budgets_family_named_allocation_unique_idx": {
+          "name": "budgets_family_named_allocation_unique_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "month",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(btrim(\"name\"))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "budgets_family_id_fkey": {
+          "name": "budgets_family_id_fkey",
+          "tableFrom": "budgets",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "budgets_account_id_fkey": {
+          "name": "budgets_account_id_fkey",
+          "tableFrom": "budgets",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "budgets_category_id_fkey": {
+          "name": "budgets_category_id_fkey",
+          "tableFrom": "budgets",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "budgets_select_member": {
+          "name": "budgets_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"budgets\".\"family_id\")"
+        },
+        "budgets_insert_manager_matching_refs": {
+          "name": "budgets_insert_manager_matching_refs",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "public.is_family_admin_or_owner(\"budgets\".\"family_id\") and exists (select 1 from public.accounts a where a.id = \"budgets\".\"account_id\" and a.family_id = \"budgets\".\"family_id\") and (\"budgets\".\"category_id\" is null or exists (select 1 from public.categories c where c.id = \"budgets\".\"category_id\" and (c.family_id = \"budgets\".\"family_id\" or c.family_id is null)))"
+        },
+        "budgets_update_manager_matching_refs": {
+          "name": "budgets_update_manager_matching_refs",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"budgets\".\"family_id\")",
+          "withCheck": "public.is_family_admin_or_owner(\"budgets\".\"family_id\") and exists (select 1 from public.accounts a where a.id = \"budgets\".\"account_id\" and a.family_id = \"budgets\".\"family_id\") and (\"budgets\".\"category_id\" is null or exists (select 1 from public.categories c where c.id = \"budgets\".\"category_id\" and (c.family_id = \"budgets\".\"family_id\" or c.family_id is null)))"
+        },
+        "budgets_delete_manager": {
+          "name": "budgets_delete_manager",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"budgets\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {
+        "budgets_name_check": {
+          "name": "budgets_name_check",
+          "value": "length(btrim(\"budgets\".\"name\")) > 0"
+        },
+        "budgets_month_check": {
+          "name": "budgets_month_check",
+          "value": "\"budgets\".\"month\" between 1 and 12"
+        },
+        "budgets_year_check": {
+          "name": "budgets_year_check",
+          "value": "\"budgets\".\"year\" >= 2000"
+        },
+        "budgets_amount_check": {
+          "name": "budgets_amount_check",
+          "value": "\"budgets\".\"amount\" > 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.categories": {
+      "name": "categories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "transaction_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "categories_family_id_idx": {
+          "name": "categories_family_id_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "categories_family_id_fkey": {
+          "name": "categories_family_id_fkey",
+          "tableFrom": "categories",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "categories_family_id_name_type_key": {
+          "name": "categories_family_id_name_type_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "family_id",
+            "name",
+            "type"
+          ]
+        }
+      },
+      "policies": {
+        "categories_select_default_or_member": {
+          "name": "categories_select_default_or_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "\"categories\".\"family_id\" is null or public.is_family_member(\"categories\".\"family_id\")"
+        },
+        "categories_insert_manager_custom": {
+          "name": "categories_insert_manager_custom",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "\"categories\".\"family_id\" is not null and \"categories\".\"is_default\" = false and public.is_family_admin_or_owner(\"categories\".\"family_id\")"
+        },
+        "categories_update_manager_custom": {
+          "name": "categories_update_manager_custom",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "\"categories\".\"family_id\" is not null and \"categories\".\"is_default\" = false and public.is_family_admin_or_owner(\"categories\".\"family_id\")",
+          "withCheck": "\"categories\".\"family_id\" is not null and \"categories\".\"is_default\" = false and public.is_family_admin_or_owner(\"categories\".\"family_id\")"
+        },
+        "categories_delete_manager_custom": {
+          "name": "categories_delete_manager_custom",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "\"categories\".\"family_id\" is not null and \"categories\".\"is_default\" = false and public.is_family_admin_or_owner(\"categories\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {
+        "categories_name_check": {
+          "name": "categories_name_check",
+          "value": "length(btrim(\"categories\".\"name\")) > 0"
+        },
+        "categories_check": {
+          "name": "categories_check",
+          "value": "(\"categories\".\"family_id\" is null) = \"categories\".\"is_default\""
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.families": {
+      "name": "families",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invite_code": {
+          "name": "invite_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "families_invite_code_unique_idx": {
+          "name": "families_invite_code_unique_idx",
+          "columns": [
+            {
+              "expression": "upper(\"invite_code\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "families_owner_user_id_fkey": {
+          "name": "families_owner_user_id_fkey",
+          "tableFrom": "families",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "families_select_member": {
+          "name": "families_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"families\".\"id\")"
+        },
+        "families_insert_owner": {
+          "name": "families_insert_owner",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "\"families\".\"owner_user_id\" = auth.uid()"
+        },
+        "families_update_owner": {
+          "name": "families_update_owner",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_owner(\"families\".\"id\")",
+          "withCheck": "\"families\".\"owner_user_id\" = auth.uid()"
+        }
+      },
+      "checkConstraints": {
+        "families_name_check": {
+          "name": "families_name_check",
+          "value": "length(btrim(\"families\".\"name\")) > 0"
+        },
+        "families_check": {
+          "name": "families_check",
+          "value": "length(btrim(\"families\".\"invite_code\")) = 8"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.family_members": {
+      "name": "family_members",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "family_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'member'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "family_members_user_id_idx": {
+          "name": "family_members_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "family_members_family_role_idx": {
+          "name": "family_members_family_role_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "family_members_family_id_fkey": {
+          "name": "family_members_family_id_fkey",
+          "tableFrom": "family_members",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "family_members_user_id_fkey": {
+          "name": "family_members_user_id_fkey",
+          "tableFrom": "family_members",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "family_members_family_id_user_id_key": {
+          "name": "family_members_family_id_user_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "family_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {
+        "family_members_select_member": {
+          "name": "family_members_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"family_members\".\"family_id\")"
+        },
+        "family_members_insert_owner_self": {
+          "name": "family_members_insert_owner_self",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "\"family_members\".\"user_id\" = auth.uid() and \"family_members\".\"role\" = 'owner' and public.is_family_owner(\"family_members\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.notifications": {
+      "name": "notifications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'general'"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'dashboard'"
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "notifications_family_created_idx": {
+          "name": "notifications_family_created_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"created_at\" desc",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notifications_user_read_idx": {
+          "name": "notifications_user_read_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notifications_family_id_fkey": {
+          "name": "notifications_family_id_fkey",
+          "tableFrom": "notifications",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notifications_user_id_fkey": {
+          "name": "notifications_user_id_fkey",
+          "tableFrom": "notifications",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "notifications_select_member": {
+          "name": "notifications_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"notifications\".\"family_id\") and (\"notifications\".\"user_id\" is null or \"notifications\".\"user_id\" = auth.uid())"
+        },
+        "notifications_insert_member": {
+          "name": "notifications_insert_member",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "public.is_family_member(\"notifications\".\"family_id\") and (\"notifications\".\"user_id\" is null or exists (select 1 from public.family_members fm where fm.family_id = \"notifications\".\"family_id\" and fm.user_id = \"notifications\".\"user_id\"))"
+        },
+        "notifications_update_recipient": {
+          "name": "notifications_update_recipient",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"notifications\".\"family_id\") and (\"notifications\".\"user_id\" is null or \"notifications\".\"user_id\" = auth.uid())",
+          "withCheck": "public.is_family_member(\"notifications\".\"family_id\") and (\"notifications\".\"user_id\" is null or \"notifications\".\"user_id\" = auth.uid())"
+        }
+      },
+      "checkConstraints": {
+        "notifications_title_check": {
+          "name": "notifications_title_check",
+          "value": "length(btrim(\"notifications\".\"title\")) > 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.profiles": {
+      "name": "profiles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "profiles_username_unique_idx": {
+          "name": "profiles_username_unique_idx",
+          "columns": [
+            {
+              "expression": "lower(\"username\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "profiles_id_fkey": {
+          "name": "profiles_id_fkey",
+          "tableFrom": "profiles",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "profiles_select_own_or_family_peers": {
+          "name": "profiles_select_own_or_family_peers",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "\"profiles\".\"id\" = auth.uid() or exists (select 1 from public.family_members mine join public.family_members peer on peer.family_id = mine.family_id where mine.user_id = auth.uid() and peer.user_id = \"profiles\".\"id\")"
+        },
+        "profiles_insert_own": {
+          "name": "profiles_insert_own",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "\"profiles\".\"id\" = auth.uid()"
+        },
+        "profiles_update_own": {
+          "name": "profiles_update_own",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "\"profiles\".\"id\" = auth.uid()",
+          "withCheck": "\"profiles\".\"id\" = auth.uid()"
+        }
+      },
+      "checkConstraints": {
+        "profiles_name_check": {
+          "name": "profiles_name_check",
+          "value": "length(btrim(\"profiles\".\"name\")) > 0"
+        },
+        "profiles_username_check": {
+          "name": "profiles_username_check",
+          "value": "length(btrim(\"profiles\".\"username\")) >= 3"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.saving_goal_transactions": {
+      "name": "saving_goal_transactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "saving_goal_id": {
+          "name": "saving_goal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "saving_goal_transactions_saving_goal_id_fkey": {
+          "name": "saving_goal_transactions_saving_goal_id_fkey",
+          "tableFrom": "saving_goal_transactions",
+          "tableTo": "saving_goals",
+          "columnsFrom": [
+            "saving_goal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "saving_goal_transactions_select_member": {
+          "name": "saving_goal_transactions_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "exists (select 1 from public.saving_goals sg where sg.id = \"saving_goal_transactions\".\"saving_goal_id\" and public.is_family_member(sg.family_id))"
+        },
+        "saving_goal_transactions_insert_manager": {
+          "name": "saving_goal_transactions_insert_manager",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "exists (select 1 from public.saving_goals sg where sg.id = \"saving_goal_transactions\".\"saving_goal_id\" and public.is_family_admin_or_owner(sg.family_id))"
+        },
+        "saving_goal_transactions_update_manager": {
+          "name": "saving_goal_transactions_update_manager",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "exists (select 1 from public.saving_goals sg where sg.id = \"saving_goal_transactions\".\"saving_goal_id\" and public.is_family_admin_or_owner(sg.family_id))",
+          "withCheck": "exists (select 1 from public.saving_goals sg where sg.id = \"saving_goal_transactions\".\"saving_goal_id\" and public.is_family_admin_or_owner(sg.family_id))"
+        },
+        "saving_goal_transactions_delete_manager": {
+          "name": "saving_goal_transactions_delete_manager",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "exists (select 1 from public.saving_goals sg where sg.id = \"saving_goal_transactions\".\"saving_goal_id\" and public.is_family_admin_or_owner(sg.family_id))"
+        }
+      },
+      "checkConstraints": {
+        "saving_goal_transactions_amount_check": {
+          "name": "saving_goal_transactions_amount_check",
+          "value": "\"saving_goal_transactions\".\"amount\" > 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.saving_goals": {
+      "name": "saving_goals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_amount": {
+          "name": "target_amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_amount": {
+          "name": "current_amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "target_date": {
+          "name": "target_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "saving_goal_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "saving_goals_family_id_idx": {
+          "name": "saving_goals_family_id_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "saving_goals_family_id_fkey": {
+          "name": "saving_goals_family_id_fkey",
+          "tableFrom": "saving_goals",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "saving_goals_select_member": {
+          "name": "saving_goals_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"saving_goals\".\"family_id\")"
+        },
+        "saving_goals_insert_manager": {
+          "name": "saving_goals_insert_manager",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "public.is_family_admin_or_owner(\"saving_goals\".\"family_id\")"
+        },
+        "saving_goals_update_manager": {
+          "name": "saving_goals_update_manager",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"saving_goals\".\"family_id\")",
+          "withCheck": "public.is_family_admin_or_owner(\"saving_goals\".\"family_id\")"
+        },
+        "saving_goals_delete_manager": {
+          "name": "saving_goals_delete_manager",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"saving_goals\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {
+        "saving_goals_name_check": {
+          "name": "saving_goals_name_check",
+          "value": "length(btrim(\"saving_goals\".\"name\")) > 0"
+        },
+        "saving_goals_target_amount_check": {
+          "name": "saving_goals_target_amount_check",
+          "value": "\"saving_goals\".\"target_amount\" > 0"
+        },
+        "saving_goals_current_amount_check": {
+          "name": "saving_goals_current_amount_check",
+          "value": "\"saving_goals\".\"current_amount\" >= 0"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.transactions": {
+      "name": "transactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "family_id": {
+          "name": "family_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_id": {
+          "name": "budget_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "transaction_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "transactions_family_date_idx": {
+          "name": "transactions_family_date_idx",
+          "columns": [
+            {
+              "expression": "family_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"transaction_date\" desc",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transactions_budget_id_idx": {
+          "name": "transactions_budget_id_idx",
+          "columns": [
+            {
+              "expression": "budget_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transactions_family_id_fkey": {
+          "name": "transactions_family_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "families",
+          "columnsFrom": [
+            "family_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transactions_account_id_fkey": {
+          "name": "transactions_account_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_category_id_fkey": {
+          "name": "transactions_category_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_budget_id_fkey": {
+          "name": "transactions_budget_id_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "budgets",
+          "columnsFrom": [
+            "budget_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "transactions_created_by_fkey": {
+          "name": "transactions_created_by_fkey",
+          "tableFrom": "transactions",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "transactions_select_member": {
+          "name": "transactions_select_member",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_member(\"transactions\".\"family_id\")"
+        },
+        "transactions_insert_member_matching_refs": {
+          "name": "transactions_insert_member_matching_refs",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "public.is_family_member(\"transactions\".\"family_id\") and \"transactions\".\"created_by\" = auth.uid() and exists (select 1 from public.accounts a where a.id = \"transactions\".\"account_id\" and a.family_id = \"transactions\".\"family_id\") and (\"transactions\".\"category_id\" is null or exists (select 1 from public.categories c where c.id = \"transactions\".\"category_id\" and (c.family_id = \"transactions\".\"family_id\" or c.family_id is null))) and (\"transactions\".\"budget_id\" is null or exists (select 1 from public.budgets b where b.id = \"transactions\".\"budget_id\" and b.family_id = \"transactions\".\"family_id\" and b.account_id = \"transactions\".\"account_id\"))"
+        },
+        "transactions_update_manager_or_creator_matching_refs": {
+          "name": "transactions_update_manager_or_creator_matching_refs",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"transactions\".\"family_id\") or \"transactions\".\"created_by\" = auth.uid()",
+          "withCheck": "public.is_family_member(\"transactions\".\"family_id\") and (\"transactions\".\"created_by\" = auth.uid() or public.is_family_admin_or_owner(\"transactions\".\"family_id\")) and exists (select 1 from public.accounts a where a.id = \"transactions\".\"account_id\" and a.family_id = \"transactions\".\"family_id\") and (\"transactions\".\"category_id\" is null or exists (select 1 from public.categories c where c.id = \"transactions\".\"category_id\" and (c.family_id = \"transactions\".\"family_id\" or c.family_id is null))) and (\"transactions\".\"budget_id\" is null or exists (select 1 from public.budgets b where b.id = \"transactions\".\"budget_id\" and b.family_id = \"transactions\".\"family_id\" and b.account_id = \"transactions\".\"account_id\"))"
+        },
+        "transactions_delete_manager": {
+          "name": "transactions_delete_manager",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "authenticated"
+          ],
+          "using": "public.is_family_admin_or_owner(\"transactions\".\"family_id\")"
+        }
+      },
+      "checkConstraints": {
+        "transactions_amount_check": {
+          "name": "transactions_amount_check",
+          "value": "\"transactions\".\"amount\" > 0"
+        },
+        "transactions_check": {
+          "name": "transactions_check",
+          "value": "(\"transactions\".\"type\" = 'income' and \"transactions\".\"category_id\" is not null and \"transactions\".\"budget_id\" is null) or (\"transactions\".\"type\" = 'expense' and \"transactions\".\"category_id\" is null and \"transactions\".\"budget_id\" is not null)"
+        }
+      },
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {
+    "public.account_type": {
+      "name": "account_type",
+      "schema": "public",
+      "values": [
+        "cash",
+        "bank",
+        "ewallet",
+        "saving",
+        "other"
+      ]
+    },
+    "public.family_role": {
+      "name": "family_role",
+      "schema": "public",
+      "values": [
+        "owner",
+        "admin",
+        "member"
+      ]
+    },
+    "public.saving_goal_status": {
+      "name": "saving_goal_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "completed"
+      ]
+    },
+    "public.transaction_type": {
+      "name": "transaction_type",
+      "schema": "public",
+      "values": [
+        "income",
+        "expense"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
