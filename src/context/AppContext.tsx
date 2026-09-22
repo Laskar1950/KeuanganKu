@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
+import { copyToClipboard } from "@/lib/utils";
 import {
   toAccount,
   toBudget,
@@ -615,8 +616,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notify("Kode undangan belum tersedia. Pastikan migration invite sudah dijalankan.");
       return;
     }
-    await navigator.clipboard.writeText(code);
-    notify("Kode undangan keluarga berhasil disalin.");
+    const success = await copyToClipboard(code);
+    if (success) {
+      notify("Kode undangan keluarga berhasil disalin.");
+    } else {
+      notify(`Gagal menyalin otomatis. Kode: ${code}`);
+    }
   };
 
   const getAllocationForTransaction = (payload: TransactionPayload): Budget | null => {
@@ -687,12 +692,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }) => {
     const { account, balance } = getAccountBalanceForValidation(accountId, ignoreTransactionId);
     const nominal = Number(amount || 0);
+    const isNegative = nominal > Number(balance || 0);
+    const deficit = isNegative ? nominal - Number(balance || 0) : 0;
 
-    if (nominal > Number(balance || 0)) {
-      throw new Error(`Saldo dompet ${account.name} tidak cukup. Saldo saat ini ${formatCurrency(balance)}.`);
-    }
-
-    return { account, balance };
+    return { account, balance, isNegative, deficit };
   };
 
   const addTransaction = async (payload: TransactionPayload) => {
@@ -708,7 +711,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!isExpense && !categoryId) throw new Error("Kategori pemasukan wajib dipilih.");
 
     const projection = isExpense ? getBudgetProjection(budget, payload.amount) : null;
-    if (isExpense) validateExpenseSourceBalance({ accountId, amount: payload.amount });
+    const sourceCheck = isExpense ? validateExpenseSourceBalance({ accountId, amount: payload.amount }) : null;
 
     const { error } = await supabase.from("transactions").insert({
       family_id: state.household!.id,
@@ -730,16 +733,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payload.amount
       )}${isExpense && budget?.name ? ` dari alokasi ${budget.name}` : ""}${
         projection?.overBudget ? ` dan membuat over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
-      }.`,
+      }${sourceCheck?.isNegative ? ` (saldo dompet minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
     });
 
     notify(
-      isExpense && projection?.overBudget
-        ? `Pengeluaran berhasil disimpan sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
-        : isExpense
-          ? "Pengeluaran berhasil disimpan. Saldo dompet otomatis berkurang."
-          : "Transaksi berhasil disimpan."
+      isExpense && sourceCheck?.isNegative
+        ? `Pengeluaran disimpan. Saldo dompet ${sourceCheck.account.name} minus ${formatCurrency(sourceCheck.deficit)}.`
+        : isExpense && projection?.overBudget
+          ? `Pengeluaran berhasil disimpan sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
+          : isExpense
+            ? "Pengeluaran berhasil disimpan. Saldo dompet otomatis berkurang."
+            : "Transaksi berhasil disimpan."
     );
     await refreshData();
   };
@@ -760,7 +765,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!isExpense && !categoryId) throw new Error("Kategori pemasukan wajib dipilih.");
 
     const projection = isExpense ? getBudgetProjection(budget, payload.amount, id) : null;
-    if (isExpense) validateExpenseSourceBalance({ accountId, amount: payload.amount, ignoreTransactionId: id });
+    const sourceCheck = isExpense ? validateExpenseSourceBalance({ accountId, amount: payload.amount, ignoreTransactionId: id }) : null;
 
     const { error } = await supabase
       .from("transactions")
@@ -781,16 +786,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       title: "Transaksi diperbarui",
       message: `${state.user?.name || "Anggota keluarga"} memperbarui transaksi ${formatCurrency(payload.amount)}${
         projection?.overBudget ? ` dan alokasi menjadi over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
-      }.`,
+      }${sourceCheck?.isNegative ? ` (saldo dompet minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
     });
 
     notify(
-      isExpense && projection?.overBudget
-        ? `Pengeluaran berhasil diperbarui sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
-        : isExpense
-          ? "Pengeluaran berhasil diperbarui. Saldo dompet ikut disesuaikan."
-          : "Transaksi berhasil diperbarui."
+      isExpense && sourceCheck?.isNegative
+        ? `Pengeluaran diperbarui. Saldo dompet ${sourceCheck.account.name} minus ${formatCurrency(sourceCheck.deficit)}.`
+        : isExpense && projection?.overBudget
+          ? `Pengeluaran berhasil diperbarui sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
+          : isExpense
+            ? "Pengeluaran berhasil diperbarui. Saldo dompet ikut disesuaikan."
+            : "Transaksi berhasil diperbarui."
     );
     await refreshData();
   };
@@ -1030,7 +1037,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       amount: Number(payload.amount),
       note: payload.note || null,
     });
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Nama alokasi ini sudah digunakan untuk periode bulan tersebut.");
+      }
+      throw error;
+    }
 
     await createNotification({
       type: "budget",
@@ -1077,7 +1089,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
       .eq("id", id)
       .eq("family_id", state.household!.id);
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Nama alokasi ini sudah digunakan untuk periode bulan tersebut.");
+      }
+      throw error;
+    }
 
     await createNotification({
       type: "budget",

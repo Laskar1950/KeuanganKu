@@ -35,5 +35,7 @@ export const currentMonthYear = (): { month: number; year: number } => {
   return { month: now.getMonth() + 1, year: now.getFullYear() };
 };
 
+export const sanitizeNumericInput = (value: string): string => String(value || "").replace(/\D/g, "");
+
 export const monthLabel = (month: number, year: number): string =>
   new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));

@@ -3,9 +3,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, PlusCircle, Search, Wallet, X } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { cn } from "@/lib/utils";
-import { formatRupiah, todayKey } from "@/utils/format";
+import { formatRupiah, sanitizeNumericInput, todayKey } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
 import { getBudgetCycle, getBudgetCycleTransactions, formatBudgetCycleRange } from "@/utils/budgetCycle";
+import { useDebounce } from "@/utils/useDebounce";
+import { useBodyScrollLock } from "@/utils/useBodyScrollLock";
 import type { Account, Budget, Category, Transaction } from "@/types";
 
 interface TransactionForm {
@@ -64,21 +66,23 @@ function AllocationPickerModal({
   setSearch,
   cycle,
 }: AllocationPickerModalProps) {
+  const debouncedSearch = useDebounce(search, 200);
+
   const filteredBudgets = useMemo(() => {
-    const keyword = normalizeText(search);
+    const keyword = normalizeText(debouncedSearch);
     if (!keyword) return budgets;
 
     return budgets.filter((budget) => {
       const account = accountBalances.find((item) => item.id === budget.accountId);
       return [budget.name, budget.note, account?.name].some((value) => normalizeText(value || "").includes(keyword));
     });
-  }, [accountBalances, budgets, search]);
+  }, [accountBalances, budgets, debouncedSearch]);
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-backdrop p-3 backdrop-blur-[10px]"
+          className="fixed inset-0 z-[75] flex items-end justify-center bg-backdrop p-3 backdrop-blur-[10px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -228,6 +232,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const [savingCategory, setSavingCategory] = useState(false);
   const [allocationPickerOpen, setAllocationPickerOpen] = useState(false);
   const [allocationSearch, setAllocationSearch] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (editingTransaction) {
@@ -319,12 +326,22 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting) return;
     try {
+      setSubmitting(true);
       const isExpense = form.type === "expense";
+      if (!isExpense && !incomeCategories.length) {
+        throw new Error("Kategori pemasukan belum ada. Tambahkan kategori terlebih dahulu.");
+      }
+      const categoryId = isExpense ? null : form.categoryId || incomeCategories[0]?.id;
+      if (!isExpense && !categoryId) {
+        throw new Error("Pilih kategori pemasukan terlebih dahulu.");
+      }
+
       const payload = {
         ...form,
         amount: Number(form.amount),
-        categoryId: isExpense ? null : form.categoryId || incomeCategories[0]?.id,
+        categoryId,
         accountId: isExpense
           ? selectedBudget?.accountId || ""
           : form.accountId || accountBalances.find((account: Account) => account.isActive)?.id,
@@ -337,6 +354,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
       onClose();
     } catch (error) {
       notify(error instanceof Error ? error.message : "Gagal menyimpan transaksi.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -344,7 +363,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-backdrop p-3 backdrop-blur-[10px]"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-backdrop p-3 backdrop-blur-[10px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -408,11 +427,10 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
               <label className={labelClassName}>Nominal</label>
               <input
                 inputMode="numeric"
-                type="number"
-                min="1"
+                type="text"
                 placeholder="Contoh: 150000"
                 value={form.amount}
-                onChange={(event) => setField("amount", event.target.value)}
+                onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
                 className={fieldClassName}
               />
             </div>
@@ -573,9 +591,10 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
             <button
               type="submit"
-              className="h-12 w-full rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
+              disabled={submitting}
+              className="h-12 w-full rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 disabled:opacity-60 [background-image:var(--gradient-brand)]"
             >
-              Simpan Transaksi
+              {submitting ? "Menyimpan..." : "Simpan Transaksi"}
             </button>
           </motion.form>
         </motion.div>

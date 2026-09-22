@@ -1,11 +1,12 @@
 import { lazy, Suspense, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Plus, WifiOff } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
 import BottomNav from "./components/BottomNav";
 import TransactionSheet from "./components/TransactionSheet";
 import { GlassLoading, Toast } from "./components/UI";
 import { hasSupabaseEnv } from "./lib/supabaseClient";
+import { useOnlineStatus } from "./utils/useOnlineStatus";
 import type { Transaction } from "./types";
 
 function ConfigErrorScreen() {
@@ -42,6 +43,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 
 function AppContent() {
   const { user, household, toast, loading } = useApp();
+  const isOnline = useOnlineStatus();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -102,6 +104,11 @@ function AppContent() {
     <div className="flex min-h-screen justify-center [background:var(--gradient-bg)]">
       <Toast message={toast} />
       <div className="relative min-h-screen w-full max-w-[430px] overflow-hidden [background:var(--gradient-frame)] min-[520px]:my-5 min-[520px]:max-h-[844px] min-[520px]:min-h-[844px] min-[520px]:rounded-[42px] min-[520px]:border-[10px] min-[520px]:border-panel-strong min-[520px]:shadow-[var(--shadow-hover),inset_0_0_0_1px_var(--line)] min-[520px]:[backdrop-filter:var(--blur)] min-[520px]:[outline:1px_solid_var(--line-strong)]">
+        {!isOnline && (
+          <div className="flex items-center justify-center gap-1.5 border-b border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-center text-[11px] font-black text-amber-600 dark:text-amber-400">
+            <WifiOff size={13} /> Sedang offline. Menampilkan data tersimpan.
+          </div>
+        )}
         <main className="h-screen overflow-y-auto px-4 pt-6 pb-[116px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[520px]:h-[824px] min-[520px]:pt-[34px] max-[390px]:px-3.5">
           <Suspense fallback={<GlassLoading />}>
             <AnimatePresence mode="wait">

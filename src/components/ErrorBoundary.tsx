@@ -23,6 +23,16 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     window.location.reload();
   };
 
+  handleReset = () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
+    window.location.href = "/";
+  };
+
   render() {
     if (!this.state.error) return this.props.children;
 
@@ -35,15 +45,24 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
           <h1 className="font-display text-2xl leading-tight tracking-tight text-ink">Terjadi kesalahan</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Aplikasi mengalami error tak terduga. Muat ulang halaman untuk melanjutkan. Jika masalah berulang, coba
-            bersihkan cache browser atau hubungi pengelola.
+            bersihkan sesi atau hubungi pengelola.
           </p>
-          <button
-            type="button"
-            onClick={this.handleReload}
-            className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
-          >
-            Muat Ulang Aplikasi
-          </button>
+          <div className="grid gap-2">
+            <button
+              type="button"
+              onClick={this.handleReload}
+              className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
+            >
+              Muat Ulang Aplikasi
+            </button>
+            <button
+              type="button"
+              onClick={this.handleReset}
+              className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-line bg-panel-strong text-sm font-black text-rose-dark shadow-soft transition hover:bg-rose-bg"
+            >
+              Reset Sesi & Cache
+            </button>
+          </div>
           <details className="text-xs font-semibold text-muted-foreground">
             <summary>Detail teknis</summary>
             <p className="mt-2 break-words">{this.state.error?.message || String(this.state.error)}</p>

@@ -28,8 +28,13 @@ function resolveTheme(preference: ThemePreference): ResolvedTheme {
 function apply(preference: ThemePreference) {
   const theme = resolveTheme(preference);
   document.documentElement.setAttribute("data-theme", theme);
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", theme === "dark" ? META_DARK : META_LIGHT);
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", theme === "dark" ? META_DARK : META_LIGHT);
 }
 
 export function getThemePreference(): ThemePreference {

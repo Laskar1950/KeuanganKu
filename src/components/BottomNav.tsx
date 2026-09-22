@@ -28,8 +28,11 @@ export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
+            aria-label={tab.label}
+            aria-current={isActive ? "page" : undefined}
+            title={tab.label}
             className={cn(
-              "grid min-h-14 w-full min-w-0 place-items-center content-center justify-center gap-[3px] overflow-hidden rounded-[20px] px-0.5 py-[7px] text-[10px] leading-[1.1] font-black transition max-[390px]:min-h-[54px]",
+              "grid min-h-14 w-full min-w-0 place-items-center content-center justify-center gap-[3px] overflow-hidden rounded-[20px] px-0.5 py-[7px] text-[10px] leading-[1.1] font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-strong max-[390px]:min-h-[54px]",
               isActive
                 ? "text-on-accent shadow-accent [background-image:var(--gradient-brand)]"
                 : "bg-transparent text-muted-foreground hover:text-rose-strong"

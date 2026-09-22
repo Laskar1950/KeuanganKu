@@ -4,7 +4,7 @@ import { useApp } from "@/context/AppContext";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
 import { cn } from "@/lib/utils";
-import { formatRupiah } from "@/utils/format";
+import { formatRupiah, sanitizeNumericInput } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
 import {
   formatBudgetCycleLabel,
@@ -79,6 +79,7 @@ export default function Budgets() {
   const [detailBudget, setDetailBudget] = useState<Budget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Budget | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const canManageBudget = ["owner", "admin"].includes(currentMember?.role);
   const cycleRange = formatBudgetCycleRange(selectedCycle.month, selectedCycle.year);
@@ -135,7 +136,9 @@ export default function Budgets() {
 
   const submitBudget = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting) return;
     try {
+      setSubmitting(true);
       if (!canManageBudget) throw new Error("Hanya owner atau admin yang bisa mengelola alokasi.");
       if (!form.name.trim()) throw new Error("Nama alokasi wajib diisi.");
       if (!form.accountId) throw new Error("Sumber dompet wajib dipilih.");
@@ -160,6 +163,8 @@ export default function Budgets() {
       closeForm();
     } catch (error) {
       notify(error instanceof Error ? error.message : "Gagal menyimpan alokasi.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -341,10 +346,10 @@ export default function Budgets() {
               <div className="grid gap-2">
                 <label className={labelClassName}>Nominal</label>
                 <input
-                  type="number"
-                  min="1"
+                  inputMode="numeric"
+                  type="text"
                   value={form.amount}
-                  onChange={(event) => setField("amount", event.target.value)}
+                  onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
                   placeholder="Contoh: 1000000"
                   className={fieldClassName}
                 />
@@ -414,9 +419,10 @@ export default function Budgets() {
               </button>
               <button
                 type="submit"
-                className="h-12 flex-1 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
+                disabled={submitting}
+                className="h-12 flex-1 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 disabled:opacity-60 [background-image:var(--gradient-brand)]"
               >
-                {editingBudget ? "Simpan Perubahan" : "Simpan Alokasi"}
+                {submitting ? "Menyimpan..." : editingBudget ? "Simpan Perubahan" : "Simpan Alokasi"}
               </button>
             </div>
           </form>

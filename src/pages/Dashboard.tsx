@@ -54,9 +54,21 @@ function formatDateTime(value?: string) {
 }
 
 function Avatar({ user }: { user?: { name?: string; avatarUrl?: string } | null }) {
+  const [error, setError] = useState(false);
+  const showImg = user?.avatarUrl && !error;
+
   return (
     <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[17px] border border-line bg-panel-strong text-base font-black text-rose-dark">
-      {user?.avatarUrl ? <img src={user.avatarUrl} alt={user?.name || "Foto profil"} className="size-full object-cover" /> : <span>{initials(user?.name)}</span>}
+      {showImg ? (
+        <img
+          src={user.avatarUrl}
+          alt={user?.name || "Foto profil"}
+          onError={() => setError(true)}
+          className="size-full object-cover"
+        />
+      ) : (
+        <span>{initials(user?.name)}</span>
+      )}
     </div>
   );
 }
@@ -233,6 +245,11 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <div>
             <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Dompet</p>
             <h2 className="font-display text-lg tracking-tight text-ink">Saldo per dompet</h2>
+            {accountBalances.length > 1 && (
+              <small className="text-[10.5px] font-semibold text-muted-foreground">
+                {accountBalances.length} dompet · geser untuk melihat semua
+              </small>
+            )}
           </div>
           <button
             type="button"
@@ -310,7 +327,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
                 {overBudgetAmount > 0 ? "Over budget" : "Progress"}
               </span>
               <strong className={cn("text-[13px] font-black", overBudgetAmount > 0 ? "text-red" : "text-ink")}>
-                {overBudgetAmount > 0 ? formatRupiah(overBudgetAmount) : `${budgetProgressRaw}%`}
+                {overBudgetAmount > 0 ? `${budgetProgressRaw}% · Over ${formatRupiah(overBudgetAmount)}` : `${budgetProgressRaw}%`}
               </strong>
             </div>
           </div>

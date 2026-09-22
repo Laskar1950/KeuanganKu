@@ -142,8 +142,9 @@ export default function Reports() {
           .reduce((total, transaction) => total + Number(transaction.amount || 0), 0);
         const amount = Number(budget.amount || 0);
         const remaining = amount - used;
-        const percentage = amount > 0 ? Math.min(100, (used / amount) * 100) : 0;
-        return { ...budget, used, remaining, percentage };
+        const percentageRaw = amount > 0 ? Math.round((used / amount) * 100) : 0;
+        const percentage = Math.min(100, percentageRaw);
+        return { ...budget, used, remaining, percentage, percentageRaw };
       })
       .sort((a, b) => b.used - a.used);
   }, [filteredTransactions, periodBudgets]);
@@ -395,7 +396,7 @@ export default function Reports() {
                   </div>
 
                   <div className="flex items-center justify-between gap-3 text-[11px] font-semibold text-muted-foreground">
-                    <span>Alokasi {formatCurrency(budget.amount)}</span>
+                    <span>Alokasi {formatCurrency(budget.amount)} ({budget.percentageRaw}%)</span>
                     <span className={isOver ? "font-black text-red" : ""}>
                       {isOver ? `Over ${formatCurrency(Math.abs(budget.remaining))}` : `Sisa ${formatCurrency(budget.remaining)}`}
                     </span>

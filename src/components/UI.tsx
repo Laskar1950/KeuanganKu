@@ -50,7 +50,7 @@ export function Toast({ message }: { message?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-[18px] left-1/2 z-[80] w-[calc(100%-32px)] max-w-[398px] -translate-x-1/2 rounded-[18px] border border-sheet-border bg-toast-bg px-3.5 py-3 text-[13px] font-black text-toast-ink shadow-soft-hover backdrop-blur-[22px]"
+      className="fixed top-[18px] left-1/2 z-[100] w-[calc(100%-32px)] max-w-[398px] -translate-x-1/2 rounded-[18px] border border-sheet-border bg-toast-bg px-3.5 py-3 text-[13px] font-black text-toast-ink shadow-soft-hover backdrop-blur-[22px]"
     >
       {message}
     </div>

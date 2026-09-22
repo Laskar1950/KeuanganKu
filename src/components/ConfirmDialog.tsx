@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBodyScrollLock } from "@/utils/useBodyScrollLock";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -29,6 +30,8 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return undefined;

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
 import { getBudgetCycleTransactions, formatBudgetCycleRange } from "@/utils/budgetCycle";
+import { useBodyScrollLock } from "@/utils/useBodyScrollLock";
 import type { Account, Budget, Transaction } from "@/types";
 
 interface FinanceDetailModalProps {
@@ -78,6 +79,8 @@ export default function FinanceDetailModal({
   accountBalances = [],
   onClose,
 }: FinanceDetailModalProps) {
+  useBodyScrollLock(open);
+
   const data = useMemo(() => {
     if (!item) {
       return {

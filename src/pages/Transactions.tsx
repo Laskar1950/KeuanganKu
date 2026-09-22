@@ -5,6 +5,7 @@ import TransactionList from "@/components/TransactionList";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/utils/format";
+import { useDebounce } from "@/utils/useDebounce";
 import type { Account, Budget, Category, FamilyMember, Transaction } from "@/types";
 
 const PAGE_SIZE = 20;
@@ -56,6 +57,7 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
   } = useApp();
 
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 250);
   const [type, setType] = useState("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<TransactionFilters>(emptyFilters);
@@ -68,7 +70,7 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
   const canDeleteTransaction = () => Boolean(permissions?.canDeleteTransactions);
 
   const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = debouncedQuery.trim().toLowerCase();
 
     return (transactions as Transaction[]).filter((trx) => {
       const category = (categories as Category[]).find((cat) => cat.id === trx.categoryId);
@@ -113,7 +115,7 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
         matchQuery
       );
     });
-  }, [transactions, categories, budgets, accountBalances, query, type, filters]);
+  }, [transactions, categories, budgets, accountBalances, debouncedQuery, type, filters]);
 
   const hasAdvancedFilter =
     filters.creatorId !== "all" ||
@@ -125,7 +127,7 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [query, type, filters]);
+  }, [debouncedQuery, type, filters]);
 
   const visibleTransactions = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const remainingTransactions = Math.max(0, filtered.length - visibleTransactions.length);

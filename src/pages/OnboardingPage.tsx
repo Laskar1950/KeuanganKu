@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { sanitizeNumericInput } from "@/utils/format";
 import { useApp } from "@/context/AppContext";
 
 interface OnboardingForm {
@@ -167,9 +168,9 @@ export default function OnboardingPage() {
                     <Input
                       id="initialBalance"
                       inputMode="numeric"
-                      type="number"
+                      type="text"
                       value={form.initialBalance}
-                      onChange={(event) => setField("initialBalance", event.target.value)}
+                      onChange={(event) => setField("initialBalance", sanitizeNumericInput(event.target.value))}
                       className={fieldClassName}
                     />
                   </div>

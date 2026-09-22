@@ -25,7 +25,7 @@ import {
 import { useApp } from "@/context/AppContext";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
-import { formatRupiah } from "@/utils/format";
+import { formatRupiah, sanitizeNumericInput } from "@/utils/format";
 import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
 import type { Account, Category, FamilyMember, SavingGoal } from "@/types";
 
@@ -91,6 +91,9 @@ function normalizeUsername(value = "") {
 }
 
 function ProfileAvatar({ user, size = "large" }: { user?: { name?: string; avatarUrl?: string } | null; size?: "large" | "small" }) {
+  const [error, setError] = useState(false);
+  const showImg = user?.avatarUrl && !error;
+
   return (
     <div
       className={cn(
@@ -98,16 +101,33 @@ function ProfileAvatar({ user, size = "large" }: { user?: { name?: string; avata
         size === "large" ? "size-16 text-xl" : "size-11 text-base"
       )}
     >
-      {user?.avatarUrl ? <img src={user.avatarUrl} alt={user?.name || "Foto profil"} className="size-full object-cover" /> : <span>{initials(user?.name)}</span>}
+      {showImg ? (
+        <img
+          src={user.avatarUrl}
+          alt={user?.name || "Foto profil"}
+          onError={() => setError(true)}
+          className="size-full object-cover"
+        />
+      ) : (
+        <span>{initials(user?.name)}</span>
+      )}
     </div>
   );
 }
 
 function MemberAvatar({ member }: { member: FamilyMember }) {
-  if (member.profile?.avatarUrl) {
+  const [error, setError] = useState(false);
+  const showImg = member.profile?.avatarUrl && !error;
+
+  if (showImg) {
     return (
       <div className="size-11 shrink-0 overflow-hidden rounded-[17px] border border-line bg-panel-strong">
-        <img src={member.profile.avatarUrl} alt={member.profile.name || "Anggota"} className="size-full object-cover" />
+        <img
+          src={member.profile?.avatarUrl}
+          alt={member.profile?.name || "Anggota"}
+          onError={() => setError(true)}
+          className="size-full object-cover"
+        />
       </div>
     );
   }
@@ -172,6 +192,7 @@ export default function Settings({ view = "menu" }: SettingsProps) {
     familyMembers,
     currentMember,
     accountBalances,
+    transactions,
     categories,
     savingGoals,
     addAccount,
@@ -195,6 +216,9 @@ export default function Settings({ view = "menu" }: SettingsProps) {
   const [passwordForm, setPasswordForm] = useState({ password: "", confirmPassword: "" });
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const editingAccountHasTransactions = Boolean(
+    editingAccountId && transactions.some((trx) => trx.accountId === editingAccountId)
+  );
   const [categoryForm, setCategoryForm] = useState({ name: "", type: "income" });
   const [goalForm, setGoalForm] = useState({ name: "", targetAmount: "", currentAmount: "", targetDate: "", note: "" });
   const [deposit, setDeposit] = useState({ id: "", amount: "" });
@@ -1023,11 +1047,18 @@ export default function Settings({ view = "menu" }: SettingsProps) {
               <div className="grid gap-2">
                 <label className={labelClassName}>Saldo awal</label>
                 <input
-                  type="number"
+                  inputMode="numeric"
+                  type="text"
+                  disabled={editingAccountHasTransactions}
                   value={accountForm.initialBalance}
-                  onChange={(event) => setAccountForm({ ...accountForm, initialBalance: event.target.value })}
-                  className={fieldClassName}
+                  onChange={(event) => setAccountForm({ ...accountForm, initialBalance: sanitizeNumericInput(event.target.value) })}
+                  className={cn(fieldClassName, editingAccountHasTransactions && "cursor-not-allowed opacity-60")}
                 />
+                {editingAccountHasTransactions && (
+                  <small className="text-[10.5px] font-semibold text-muted-foreground">
+                    Saldo awal terkunci karena dompet sudah memiliki riwayat transaksi.
+                  </small>
+                )}
               </div>
             </div>
             <button type="submit" className={secondaryButtonClassName}>
@@ -1181,9 +1212,10 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 <div className="grid gap-2">
                   <label className={labelClassName}>Setoran</label>
                   <input
-                    type="number"
+                    inputMode="numeric"
+                    type="text"
                     value={deposit.amount}
-                    onChange={(event) => setDeposit({ ...deposit, amount: event.target.value })}
+                    onChange={(event) => setDeposit({ ...deposit, amount: sanitizeNumericInput(event.target.value) })}
                     className={fieldClassName}
                   />
                 </div>
@@ -1207,18 +1239,20 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 <div className="grid gap-2">
                   <label className={labelClassName}>Nominal target</label>
                   <input
-                    type="number"
+                    inputMode="numeric"
+                    type="text"
                     value={goalForm.targetAmount}
-                    onChange={(event) => setGoalForm({ ...goalForm, targetAmount: event.target.value })}
+                    onChange={(event) => setGoalForm({ ...goalForm, targetAmount: sanitizeNumericInput(event.target.value) })}
                     className={fieldClassName}
                   />
                 </div>
                 <div className="grid gap-2">
                   <label className={labelClassName}>Terkumpul</label>
                   <input
-                    type="number"
+                    inputMode="numeric"
+                    type="text"
                     value={goalForm.currentAmount}
-                    onChange={(event) => setGoalForm({ ...goalForm, currentAmount: event.target.value })}
+                    onChange={(event) => setGoalForm({ ...goalForm, currentAmount: sanitizeNumericInput(event.target.value) })}
                     className={fieldClassName}
                   />
                 </div>
