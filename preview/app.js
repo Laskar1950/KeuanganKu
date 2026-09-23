@@ -271,6 +271,36 @@
   }
 
   /* ---------- Dashboard ---------- */
+  function renderDashSparkline() {
+    var periods = [];
+    for (var off = 5; off >= 0; off--) {
+      var d = new Date(CYCLE_YEAR, CYCLE_MONTH - 1 - off, 1);
+      periods.push({ m: d.getMonth() + 1, y: d.getFullYear(), label: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][d.getMonth()], isActive: d.getMonth() + 1 === CYCLE_MONTH && d.getFullYear() === CYCLE_YEAR });
+    }
+    var running = 0;
+    var pts = periods.map(function (p) {
+      var txs = TRANSACTIONS.filter(function (t) { var dd = new Date(t.date + 'T00:00:00'); return dd.getMonth() + 1 === p.m && dd.getFullYear() === p.y; });
+      var inc = txs.filter(function (t) { return t.type === 'income'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+      var exp = txs.filter(function (t) { return t.type === 'expense'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+      running += inc - exp;
+      return { label: p.label, isActive: p.isActive, balance: running };
+    });
+    var vals = pts.map(function (p) { return p.balance; });
+    var max = Math.max.apply(null, vals.concat([1]));
+    var min = Math.min.apply(null, vals.concat([0]));
+    var range = max - min || 1;
+    var w = 320, h = 72, pad = 10, stepX = (w - pad * 2) / Math.max(1, pts.length - 1);
+    function getY(v) { return h - pad - ((v - min) / range) * (h - pad * 2); }
+    function getX(i) { return pad + i * stepX; }
+    var line = pts.map(function (p, i) { return (i === 0 ? 'M' : 'L') + ' ' + getX(i).toFixed(1) + ' ' + getY(p.balance).toFixed(1); }).join(' ');
+    var area = line + ' L ' + getX(pts.length - 1).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' L ' + getX(0).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' Z';
+    var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:72px;display:block" role="img" aria-label="Tren saldo"><defs><linearGradient id="sparkGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="var(--rose-strong)" stop-opacity="0.28"/><stop offset="100%" stop-color="var(--rose-strong)" stop-opacity="0"/></linearGradient></defs><path d="' + area + '" fill="url(#sparkGrad)"/><path d="' + line + '" fill="none" stroke="var(--rose-strong)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    pts.forEach(function (p, i) { svg += '<circle cx="' + getX(i) + '" cy="' + getY(p.balance) + '" r="' + (p.isActive ? 4 : 3.5) + '" fill="' + (p.isActive ? 'var(--rose-strong)' : 'white') + '" stroke="var(--rose-strong)" stroke-width="1.5"/>'; });
+    svg += '</svg>';
+    var el = document.getElementById('dashSparkline');
+    if (el) el.innerHTML = svg;
+  }
+
   function renderDashboard() {
     $('#dashGreeting').textContent = 'Halo, ' + (USER.name.split(' ')[0] || 'Pengguna');
     $('#dashFamily').textContent = 'Keluarga Rizki';
@@ -286,6 +316,7 @@
     $('#monthExpense').textContent = showBalance ? rp(expense) : 'Rp ••••••••';
     $('#balanceToggle').innerHTML = (showBalance ? icon('eye-off', 15) : icon('eye', 15)) + ' ' + (showBalance ? 'Sembunyikan' : 'Tampilkan');
 
+    renderDashSparkline();
     renderWalletCarousel();
     renderBudgetSummary();
     renderLatestTx();
@@ -534,6 +565,46 @@
       + '<article class="reports-basic-summary-card reports-basic-expense"><span>Pengeluaran</span><strong>' + rp(expense) + '</strong><small>Total transaksi keluar</small></article>'
       + '<article class="reports-basic-summary-card"><span>Total alokasi</span><strong>' + rp(allocTotal) + '</strong><small>' + budgets.length + ' alokasi</small></article>'
       + '<article class="reports-basic-summary-card ' + (overTotal > 0 ? 'reports-basic-expense' : 'reports-basic-income') + '"><span>Over budget</span><strong>' + rp(overTotal) + '</strong><small>' + (overTotal > 0 ? 'Melewati batas' : 'Masih aman') + '</small></article>';
+
+    (function renderReportTrends() {
+      var trendEl = document.getElementById('repTrendBars');
+      var balEl = document.getElementById('repBalanceLine');
+      if (!trendEl || !balEl) return;
+      var periods = [];
+      for (var off = 5; off >= 0; off--) {
+        var d = new Date(report.year, report.month - 1 - off, 1);
+        periods.push({ m: d.getMonth() + 1, y: d.getFullYear(), label: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][d.getMonth()], full: d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }), isActive: d.getMonth() + 1 === report.month && d.getFullYear() === report.year });
+      }
+      var maxVal = 1;
+      var trendData = periods.map(function (p) {
+        var txs = TRANSACTIONS.filter(function (t) { var dd = new Date(t.date + 'T00:00:00'); return dd.getMonth() + 1 === p.m && dd.getFullYear() === p.y && (report.wallet === 'all' || t.accountId === report.wallet) && (report.budget === 'all' || t.budgetId === report.budget); });
+        var inc = txs.filter(function (t) { return t.type === 'income'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+        var exp = txs.filter(function (t) { return t.type === 'expense'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+        maxVal = Math.max(maxVal, inc, exp);
+        return { p: p, inc: inc, exp: exp };
+      });
+      trendEl.innerHTML = '<div class="trend-bars-head"><span class="legend income"></span> Pemasukan <span class="legend expense"></span> Pengeluaran</div><div class="trend-bars-grid">' + trendData.map(function (d) {
+        var ih = d.inc > 0 ? Math.max(6, Math.round(d.inc / maxVal * 80)) : 4;
+        var eh = d.exp > 0 ? Math.max(6, Math.round(d.exp / maxVal * 80)) : 4;
+        return '<div class="trend-bar-col' + (d.p.isActive ? ' active' : '') + '"><div class="trend-bar-pair"><i class="bar inc" style="height:' + ih + 'px"></i><i class="bar exp" style="height:' + eh + 'px"></i></div><small>' + d.p.label + '</small></div>';
+      }).join('') + '</div>';
+
+      var run = 0;
+      var balPts = trendData.map(function (d) { run += d.inc - d.exp; return { label: d.p.label, isActive: d.p.isActive, bal: run }; });
+      var vals = balPts.map(function (b) { return b.bal; });
+      var bmax = Math.max.apply(null, vals.concat([1]));
+      var bmin = Math.min.apply(null, vals.concat([0]));
+      var range = bmax - bmin || 1;
+      var w = 480, h = 120, pad = 16, stepX = (w - pad * 2) / Math.max(1, balPts.length - 1);
+      function gy(v) { return h - pad - ((v - bmin) / range) * (h - pad * 2); }
+      function gx(i) { return pad + i * stepX; }
+      var line = balPts.map(function (pt, i) { return (i === 0 ? 'M' : 'L') + ' ' + gx(i).toFixed(1) + ' ' + gy(pt.bal).toFixed(1); }).join(' ');
+      var area = line + ' L ' + gx(balPts.length - 1).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' L ' + gx(0).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' Z';
+      var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:120px;display:block" role="img" aria-label="Tren saldo"><defs><linearGradient id="balGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="var(--rose-strong)" stop-opacity="0.28"/><stop offset="100%" stop-color="var(--rose-strong)" stop-opacity="0"/></linearGradient></defs><path d="' + area + '" fill="url(#balGrad)"/><path d="' + line + '" fill="none" stroke="var(--rose-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+      balPts.forEach(function (pt, i) { svg += '<circle cx="' + gx(i) + '" cy="' + gy(pt.bal) + '" r="' + (pt.isActive ? 5 : 3.5) + '" fill="' + (pt.isActive ? 'var(--rose-strong)' : 'white') + '" stroke="var(--rose-strong)" stroke-width="1.5"/>'; });
+      svg += '</svg><div class="trend-badges">' + balPts.map(function (pt) { return '<span class="trend-badge' + (pt.isActive ? ' active' : '') + '">' + pt.label + ': ' + (pt.bal >= 0 ? rp(pt.bal) : '-' + rp(Math.abs(pt.bal))) + '</span>'; }).join('') + '</div>';
+      balEl.innerHTML = svg;
+    })();
 
     $('#repAllocations').innerHTML = budgets.length ? budgets.map(function (b) {
       var u = budgetUsage(b, repTx);
@@ -823,6 +894,20 @@
             renderAll();
             toast('Kategori dihapus.');
           }
+        } else if (action === 'profile-mini') {
+          var mini = document.getElementById('dashProfileMini');
+          if (mini) mini.hidden = true;
+          var btn = document.getElementById('dashAvatarBtn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+          goTab('settings'); setPanel('profile');
+          toast('Membuka Profil Akun.');
+        } else if (action === 'logout-mini') {
+          var mini2 = document.getElementById('dashProfileMini');
+          if (mini2) mini2.hidden = true;
+          var btn2 = document.getElementById('dashAvatarBtn');
+          if (btn2) btn2.setAttribute('aria-expanded', 'false');
+          toast('Berhasil logout.');
+          showScreen('auth');
         }
         return;
       }
@@ -881,6 +966,24 @@
       showBalance = !showBalance;
       renderAll();
     });
+    $('#dashAvatarBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var mini = $('#dashProfileMini');
+      var expanded = mini.hidden === false;
+      mini.hidden = expanded;
+      this.setAttribute('aria-expanded', String(!expanded));
+    });
+    document.addEventListener('click', function (e) {
+      var wrap = $('#dashUserWrap');
+      var mini = $('#dashProfileMini');
+      if (!wrap || !mini || mini.hidden) return;
+      if (!wrap.contains(e.target)) {
+        mini.hidden = true;
+        var btn = $('#dashAvatarBtn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
     $('#bellBtn').addEventListener('click', function () {
       $('#notifPanel').hidden = !$('#notifPanel').hidden;
     });
@@ -952,6 +1055,14 @@
       report = { month: CYCLE_MONTH, year: CYCLE_YEAR, wallet: 'all', budget: 'all' };
       $('#repMonth').value = report.month; $('#repYear').value = report.year; $('#repWallet').value = 'all'; $('#repBudget').value = 'all';
       renderReports();
+    });
+    var themeCycle = ['auto', 'light', 'dark'];
+    var themeBtn = document.getElementById('themeToggleBtn');
+    if (themeBtn) themeBtn.addEventListener('click', function () {
+      var idx = themeCycle.indexOf(theme);
+      var next = themeCycle[(idx + 1) % themeCycle.length];
+      setTheme(next);
+      toast('Tema: ' + (next === 'auto' ? 'Otomatis' : next === 'light' ? 'Terang' : 'Gelap'));
     });
     $('#logoutBtn').addEventListener('click', function () {
       toast('Berhasil logout.');

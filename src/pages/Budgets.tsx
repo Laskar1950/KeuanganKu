@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent, type MouseEvent } from "react";
-import { CalendarDays, ChevronDown, Edit3, PiggyBank, Plus, Trash2, Wallet, X } from "lucide-react";
+import { motion } from "framer-motion";
+import { CalendarDays, ChevronDown, Edit3, PiggyBank, Plus, Sparkles, Trash2, Wallet, X } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
@@ -208,22 +209,16 @@ export default function Budgets() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-start justify-between gap-3 px-0.5">
-        <div>
-          <p className="text-xs font-extrabold text-muted-foreground">Alokasi Anggaran</p>
-          <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">Budget keluarga</h1>
-          <small className="text-[11px] text-muted-foreground">Budget otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
-        </div>
-        {canManageBudget && (
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-[18px] border border-transparent px-4 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
-          >
-            <Plus size={18} /> Tambah
-          </button>
-        )}
-      </header>
+      <motion.header
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className="px-0.5"
+      >
+        <p className="text-xs font-extrabold text-muted-foreground">Alokasi Anggaran</p>
+        <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">Budget keluarga</h1>
+        <small className="text-[11px] text-muted-foreground">Budget otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
+      </motion.header>
 
       <section className="grid gap-4 rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -440,15 +435,20 @@ export default function Budgets() {
 
         <div className="grid gap-3">
           {filteredBudgets.length ? (
-            filteredBudgets.map((budget) => {
+            filteredBudgets.map((budget, idx) => {
               const account = (accountBalances as Account[]).find((item) => item.id === budget.accountId);
               const meta = getUsageMeta(budget, cycleTransactions);
 
               return (
-                <article
+                <motion.article
                   key={budget.id}
                   role="button"
                   tabIndex={0}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  whileTap={{ scale: 0.99 }}
                   onClick={() => setDetailBudget(budget)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") setDetailBudget(budget);
@@ -522,7 +522,8 @@ export default function Budgets() {
                         <button
                           type="button"
                           onClick={(event) => startEditBudget(budget, event)}
-                          className="inline-flex items-center gap-1 rounded-full border border-line bg-blue-bg px-2.5 py-1.5 text-[11px] font-black text-blue transition hover:opacity-80"
+                          aria-label={`Edit alokasi ${budget.name}`}
+                          className="inline-flex min-h-[32px] items-center gap-1 rounded-full border border-line bg-blue-bg px-3 py-1.5 text-[11px] font-black text-blue transition hover:opacity-80"
                         >
                           <Edit3 size={13} /> Edit
                         </button>
@@ -532,22 +533,43 @@ export default function Budgets() {
                             event.stopPropagation();
                             setDeleteTarget(budget);
                           }}
-                          className="inline-flex items-center gap-1 rounded-full border border-line bg-red-bg px-2.5 py-1.5 text-[11px] font-black text-red transition hover:opacity-80"
+                          aria-label={`Hapus alokasi ${budget.name}`}
+                          className="inline-flex min-h-[32px] items-center gap-1 rounded-full border border-line bg-red-bg px-3 py-1.5 text-[11px] font-black text-red transition hover:opacity-80"
                         >
                           <Trash2 size={13} /> Hapus
                         </button>
                       </span>
                     )}
                   </div>
-                </article>
+                </motion.article>
               );
             })
           ) : (
-            <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 text-center text-sm font-semibold text-muted-foreground shadow-soft">
-              Belum ada alokasi pada periode ini. Klik tombol Tambah untuk membuat alokasi pertama.
+            <section className="rounded-[28px] border border-dashed border-line-strong bg-panel-strong/90 p-6 text-center shadow-soft">
+              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-rose-bg text-rose-dark">
+                <Sparkles size={20} />
+              </div>
+              <h3 className="mt-3 font-display text-sm font-black text-ink">Belum ada alokasi</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Mulai atur keuangan gajian 25–24 dengan menambah alokasi pertama. Biar pengeluaran lebih terkendali.
+              </p>
+              {canManageBudget ? (
+                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Tap tombol di bawah untuk menambah.</p>
+              ) : (
+                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Minta owner/admin untuk menambah alokasi.</p>
+              )}
             </section>
           )}
         </div>
+        {canManageBudget && (
+          <button
+            type="button"
+            onClick={openCreateForm}
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
+          >
+            <Plus size={18} /> Tambah Alokasi
+          </button>
+        )}
       </section>
 
       <FinanceDetailModal

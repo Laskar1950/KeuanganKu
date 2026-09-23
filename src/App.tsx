@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, WifiOff } from "lucide-react";
+import { WifiOff } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
 import BottomNav from "./components/BottomNav";
 import TransactionSheet from "./components/TransactionSheet";
@@ -124,14 +124,7 @@ function AppContent() {
             </AnimatePresence>
           </Suspense>
         </main>
-        <button
-          className="absolute right-7 bottom-24 z-[25] grid size-[58px] place-items-center rounded-[22px] border border-white/50 text-on-accent shadow-[var(--accent-glow),inset_0_1px_0_rgba(255,255,255,0.4)] transition [background-image:var(--gradient-brand)] hover:[transform:translateY(-3px)_scale(1.03)] hover:shadow-[var(--shadow-hover),var(--accent-glow)] max-[390px]:right-5 max-[390px]:bottom-[92px]"
-          onClick={openAdd}
-          aria-label="Tambah transaksi"
-        >
-          <Plus size={28} />
-        </button>
-        <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onChange={setActiveTab} onAdd={openAdd} />
         <TransactionSheet
           open={sheetOpen}
           onClose={() => setSheetOpen(false)}

@@ -168,15 +168,28 @@
             <!-- ---------- DASHBOARD ---------- -->
             <div class="page dashboard-page active" id="page-dashboard">
               <header class="header dashboard-modern-header">
-                <div class="dashboard-user-block">
-                  <div class="dashboard-user-avatar" id="dashAvatar">AR</div>
-                  <div class="brand-copy">
-                    <small>KeuanganKu</small>
-                    <strong id="dashGreeting">Halo, Afrizal</strong>
-                    <p class="item-sub" id="dashFamily">Keluarga Rizki</p>
+                <div class="dashboard-user-block dashboard-user-menu-wrap" id="dashUserWrap">
+                  <button class="dashboard-user-trigger" type="button" id="dashAvatarBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Buka menu profil">
+                    <div class="dashboard-user-avatar" id="dashAvatar">AR</div>
+                    <div class="brand-copy">
+                      <small>KeuanganKu</small>
+                      <strong id="dashGreeting">Halo, Afrizal</strong>
+                      <p class="item-sub" id="dashFamily">Keluarga Rizki</p>
+                    </div>
+                  </button>
+                  <div class="dashboard-profile-mini" id="dashProfileMini" hidden role="menu">
+                    <div class="dashboard-profile-mini-head">
+                      <strong>Afrizal Rizki</strong>
+                      <small>afrizal@email.com</small>
+                    </div>
+                    <button class="dashboard-profile-mini-item" type="button" data-action="profile-mini" role="menuitem"><span data-icon="user-round" data-size="16"></span> Profil Akun</button>
+                    <button class="dashboard-profile-mini-item danger" type="button" data-action="logout-mini" role="menuitem"><span data-icon="logout" data-size="16"></span> Logout</button>
                   </div>
                 </div>
                 <div class="dashboard-header-actions">
+                  <button class="icon-btn" id="themeToggleBtn" aria-label="Ganti tema" title="Ganti tema">
+                    <span data-icon="palette" data-size="16"></span>
+                  </button>
                   <button class="icon-btn" id="bellBtn" aria-label="Notifikasi">
                     <span data-icon="bell"></span>
                     <span class="notification-dot" id="bellDot">3</span>
@@ -216,6 +229,10 @@
                     <span>Pengeluaran bulan ini</span>
                     <strong id="monthExpense">Rp 4.610.000</strong>
                   </div>
+                </div>
+                <div class="dashboard-sparkline-wrap">
+                  <div class="dashboard-sparkline-head"><span>Tren saldo 6 periode</span><em>Live</em></div>
+                  <div class="dashboard-sparkline" id="dashSparkline"></div>
                 </div>
               </section>
 
@@ -348,15 +365,12 @@
 
             <!-- ---------- BUDGETS ---------- -->
             <div class="page budget-page" id="page-budgets">
-              <header class="salary-budget-hero">
+              <header class="salary-budget-hero salary-budget-hero--no-action">
                 <div>
                   <p class="eyebrow">Alokasi Anggaran</p>
                   <h1>Budget keluarga</h1>
                   <small>Budget otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
                 </div>
-                <button class="salary-budget-add-btn" type="button" id="budgetAddBtn">
-                  <span data-icon="plus" data-size="18"></span> Tambah
-                </button>
               </header>
 
               <section class="salary-cycle-panel">
@@ -416,6 +430,9 @@
                   <small>Klik card untuk melihat transaksi periode ini.</small>
                 </div>
                 <div class="salary-budget-card-list" id="budgetCards"></div>
+                <button class="primary-btn salary-budget-bottom-add" type="button" id="budgetAddBtn">
+                  <span data-icon="plus" data-size="18"></span> Tambah Alokasi
+                </button>
               </section>
             </div>
 
@@ -451,6 +468,21 @@
               </section>
 
               <section class="reports-basic-summary-grid" id="repSummary"></section>
+
+              <section class="reports-basic-card">
+                <div class="reports-basic-card-title">
+                  <div><h2>Tren arus kas</h2><p>Perbandingan pemasukan vs pengeluaran 6 periode.</p></div>
+                </div>
+                <div class="reports-basic-trend" id="repTrendBars"></div>
+              </section>
+
+              <section class="reports-basic-card">
+                <div class="reports-basic-card-title">
+                  <div><h2>Tren saldo (real-time)</h2><p>Garisan saldo kumulatif — live.</p></div>
+                  <em class="live-badge">Live</em>
+                </div>
+                <div class="reports-basic-trend" id="repBalanceLine"></div>
+              </section>
 
               <section class="reports-basic-card">
                 <div class="reports-basic-card-title">
@@ -757,14 +789,12 @@
 
           </div>
 
-          <button class="fab" id="fabBtn" aria-label="Tambah transaksi"><span data-icon="plus" data-size="28"></span></button>
-
-          <nav class="bottom-nav" id="bottomNav" aria-label="Navigasi utama">
+          <nav class="bottom-nav bottom-nav--center-fab" id="bottomNav" aria-label="Navigasi utama">
             <button class="nav-btn active" type="button" data-tab="dashboard"><span data-icon="home" data-size="18"></span><span>Home</span></button>
             <button class="nav-btn" type="button" data-tab="transactions"><span data-icon="receipt-text" data-size="18"></span><span>Catat</span></button>
+            <button class="nav-center-fab" type="button" id="fabBtn" aria-label="Tambah transaksi"><span data-icon="plus" data-size="26"></span></button>
             <button class="nav-btn" type="button" data-tab="budgets"><span data-icon="target" data-size="18"></span><span>Budget</span></button>
             <button class="nav-btn" type="button" data-tab="reports"><span data-icon="chart" data-size="18"></span><span>Laporan</span></button>
-            <button class="nav-btn" type="button" data-tab="settings"><span data-icon="settings" data-size="18"></span><span>Profil</span></button>
           </nav>
         </div>
 

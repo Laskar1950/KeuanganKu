@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { useApp } from "@/context/AppContext";
-import { DonutChart, TrendBars } from "@/components/ReportCharts";
+import { BalanceLineChart, DonutChart, TrendBars } from "@/components/ReportCharts";
 import { DONUT_PALETTE } from "@/utils/chartPalette";
 import { cn } from "@/lib/utils";
 import {
@@ -194,6 +195,14 @@ export default function Reports() {
     });
   }, [accountId, budgetId, month, transactions, year]);
 
+  const balancePoints = useMemo(() => {
+    let running = 0;
+    return trendPeriods.map((p) => {
+      running += p.income - p.expense;
+      return { label: p.label, fullLabel: p.fullLabel, isActive: p.isActive, balance: running };
+    });
+  }, [trendPeriods]);
+
   const latestTransactions = useMemo(() => {
     return [...filteredTransactions]
       .sort((a, b) => new Date(getTransactionDate(b)).getTime() - new Date(getTransactionDate(a)).getTime())
@@ -212,7 +221,12 @@ export default function Reports() {
 
   return (
     <main className="flex flex-col gap-4 pb-28">
-      <section className="flex flex-col gap-4 rounded-[30px] border border-line-strong bg-[image:var(--gradient-frame)] p-5 shadow-soft backdrop-blur-xl">
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+        className="flex flex-col gap-4 rounded-[30px] border border-line-strong bg-[image:var(--gradient-frame)] p-5 shadow-soft backdrop-blur-xl"
+      >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[10px] font-black tracking-[0.18em] text-rose-dark uppercase">Laporan Keuangan</p>
@@ -243,7 +257,7 @@ export default function Reports() {
             <span className="block text-xs font-bold text-muted-foreground">{filteredTransactions.length} transaksi</span>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -312,15 +326,20 @@ export default function Reports() {
       </section>
 
       <section className="grid grid-cols-2 gap-3">
-        <SummaryCard label="Pemasukan" value={formatCurrency(incomeTotal)} note="Total transaksi masuk" tone="income" />
-        <SummaryCard label="Pengeluaran" value={formatCurrency(expenseTotal)} note="Total transaksi keluar" tone="expense" />
-        <SummaryCard label="Total alokasi" value={formatCurrency(allocationTotal)} note={`${periodBudgets.length} alokasi`} />
-        <SummaryCard
-          label="Over budget"
-          value={formatCurrency(overBudgetTotal)}
-          note={overBudgetTotal > 0 ? "Melewati batas" : "Masih aman"}
-          tone={overBudgetTotal > 0 ? "expense" : "income"}
-        />
+        {[0, 1, 2, 3].map((idx) => {
+          const cards = [
+            { label: "Pemasukan", value: formatCurrency(incomeTotal), note: "Total transaksi masuk", tone: "income" as const },
+            { label: "Pengeluaran", value: formatCurrency(expenseTotal), note: "Total transaksi keluar", tone: "expense" as const },
+            { label: "Total alokasi", value: formatCurrency(allocationTotal), note: `${periodBudgets.length} alokasi`, tone: "default" as const },
+            { label: "Over budget", value: formatCurrency(overBudgetTotal), note: overBudgetTotal > 0 ? "Melewati batas" : "Masih aman", tone: (overBudgetTotal > 0 ? "expense" : "income") as const },
+          ];
+          const c = cards[idx];
+          return (
+            <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.05, duration: 0.32 }}>
+              <SummaryCard label={c.label} value={c.value} note={c.note} tone={c.tone} />
+            </motion.div>
+          );
+        })}
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
@@ -361,6 +380,17 @@ export default function Reports() {
           <p className="mt-1 text-xs font-semibold text-muted-foreground">Perbandingan pemasukan dan pengeluaran 6 periode terakhir.</p>
         </div>
         <TrendBars periods={trendPeriods} />
+      </section>
+
+      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg tracking-tight text-ink">Tren saldo (real-time)</h2>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">Garisan saldo kumulatif 6 periode — income minus expense.</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-muted-foreground">Live</span>
+        </div>
+        <BalanceLineChart points={balancePoints} />
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">

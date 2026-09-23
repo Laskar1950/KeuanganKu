@@ -1,12 +1,21 @@
-import { useMemo, useState } from "react";
-import { Bell, Eye, EyeOff, Wallet } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { Bell, Eye, EyeOff, LogOut, Moon, Palette, Sun, UserRound, Wallet } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { ProgressBar } from "@/components/UI";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
+import { BalanceLineChart } from "@/components/ReportCharts";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
-import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange } from "@/utils/budgetCycle";
+import {
+  getBudgetCycleTransactions,
+  getCurrentBudgetCycle,
+  formatBudgetCycleRange,
+  getBudgetCycleRange,
+  isDateInBudgetCycle,
+} from "@/utils/budgetCycle";
+import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
 import type { Account, AppNotification, Budget, Transaction } from "@/types";
 
 interface DashboardProps {
@@ -84,13 +93,37 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
     markNotificationRead,
     markAllNotificationsRead,
     requestNotificationPermission,
+    logout,
   } = useApp();
 
   const [showBalance, setShowBalance] = useState(true);
   const [detail, setDetail] = useState<{ open: boolean; type: string; item: unknown }>({ open: false, type: "", item: null });
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const [themePref, setThemePref] = useState(() => getThemePreference());
 
   const navigate = goTo || onNavigate;
+
+  useEffect(() => subscribeTheme(({ preference }) => setThemePref(preference as typeof themePref)), []);
+
+  useEffect(() => {
+    if (!showProfileMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowProfileMenu(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [showProfileMenu]);
 
   const activeCycle = useMemo(() => getCurrentBudgetCycle(), []);
   const currentMonthTransactions = useMemo(
@@ -121,6 +154,24 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
   }, 0);
   const budgetVariant = getProgressVariant(budgetProgressRaw, overBudgetAmount > 0);
 
+  const balanceSparkPoints = useMemo(() => {
+    const periods: { month: number; year: number }[] = [];
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const d = new Date(activeCycle.year, activeCycle.month - 1 - offset, 1);
+      periods.push({ month: d.getMonth() + 1, year: d.getFullYear() });
+    }
+    let running = 0;
+    return periods.map((p) => {
+      const cycle = getBudgetCycleRange(p.month, p.year);
+      const pts = transactions.filter((t: Transaction) => isDateInBudgetCycle((t as unknown as { transactionDate: string }).transactionDate || (t as unknown as { createdAt: string }).createdAt || "", cycle));
+      const inc = pts.filter((t: Transaction) => t.type === "income").reduce((s: number, t: Transaction) => s + Number(t.amount || 0), 0);
+      const exp = pts.filter((t: Transaction) => t.type === "expense").reduce((s: number, t: Transaction) => s + Number(t.amount || 0), 0);
+      running += inc - exp;
+      const label = new Date(p.year, p.month - 1, 1).toLocaleDateString("id-ID", { month: "short" }).slice(0, 3);
+      return { label, fullLabel: `${label} ${p.year}`, isActive: p.month === activeCycle.month && p.year === activeCycle.year, balance: running };
+    });
+  }, [activeCycle.month, activeCycle.year, transactions]);
+
   const openWalletDetail = (wallet: unknown) => setDetail({ open: true, type: "wallet", item: wallet });
   const openBudgetDetail = (budget: unknown) => setDetail({ open: true, type: "budget", item: budget });
   const closeDetail = () => setDetail({ open: false, type: "", item: null });
@@ -133,16 +184,68 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3 px-0.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Avatar user={user} />
-          <div className="min-w-0 text-left">
-            <small className="block text-[11px] font-black tracking-[0.12em] text-muted-foreground uppercase">KeuanganKu</small>
-            <strong className="block truncate font-display text-xl tracking-tight text-ink">
-              Halo, {user?.name || "Pengguna"}
-            </strong>
-            <p className="truncate text-[11px] text-muted-foreground">{household?.name || "Keluarga belum dipilih"}</p>
-          </div>
+      <motion.header
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className="flex items-center justify-between gap-3 px-0.5"
+      >
+        <div className="relative" ref={profileMenuRef}>
+          <button
+            type="button"
+            onClick={() => setShowProfileMenu((v) => !v)}
+            aria-label="Buka menu profil"
+            aria-expanded={showProfileMenu}
+            aria-haspopup="menu"
+            className="flex min-w-0 items-center gap-2.5 rounded-[17px] p-0.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-strong"
+          >
+            <Avatar user={user} />
+            <div className="min-w-0 text-left">
+              <small className="block text-[11px] font-black tracking-[0.12em] text-muted-foreground uppercase">KeuanganKu</small>
+              <strong className="block truncate font-display text-xl tracking-tight text-ink">
+                Halo, {user?.name || "Pengguna"}
+              </strong>
+              <p className="truncate text-[11px] text-muted-foreground">{household?.name || "Keluarga belum dipilih"}</p>
+            </div>
+          </button>
+          {showProfileMenu && (
+            <div
+              role="menu"
+              className="absolute top-full left-0 z-30 mt-2 w-56 overflow-hidden rounded-[20px] border border-line-strong bg-panel-strong/95 p-1.5 shadow-soft backdrop-blur-xl"
+            >
+              <div className="px-3 py-2">
+                <p className="truncate text-xs font-black text-ink">{user?.name || "Pengguna"}</p>
+                <p className="truncate text-[11px] font-semibold text-muted-foreground">{user?.email}</p>
+              </div>
+              <div className="h-px bg-line" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  navigate?.("profile");
+                }}
+                className="mt-1 flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-left text-xs font-black text-ink transition hover:bg-rose-bg hover:text-rose-dark"
+              >
+                <UserRound size={16} /> Profil Akun
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={async () => {
+                  setShowProfileMenu(false);
+                  try {
+                    await logout();
+                  } catch {
+                    // notify handled in context
+                  }
+                }}
+                className="flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-left text-xs font-black text-red transition hover:bg-red-bg"
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -157,7 +260,19 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
             </span>
           )}
         </button>
-      </header>
+        <button
+          type="button"
+          aria-label="Ganti tema"
+          title={`Tema: ${themePref}`}
+          onClick={() => {
+            const next = themePref === "light" ? "dark" : themePref === "dark" ? "system" : "light";
+            setThemePreference(next);
+          }}
+          className="grid size-11 shrink-0 place-items-center rounded-[18px] border border-line bg-panel text-muted-foreground shadow-soft transition hover:bg-soft hover:text-ink"
+        >
+          {themePref === "dark" ? <Moon size={18} /> : themePref === "light" ? <Sun size={18} /> : <Palette size={18} />}
+        </button>
+      </motion.header>
 
       {showNotifications && (
         <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
@@ -238,9 +353,23 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
             <strong className="text-sm font-black tracking-tight text-white">{formatRupiah(monthlyExpense)}</strong>
           </div>
         </div>
+        <div className="relative z-10 mt-4 rounded-[18px] bg-white/12 p-2.5 backdrop-blur">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-black tracking-[0.08em] text-white/80 uppercase">Tren saldo 6 periode</span>
+            <span className="text-[10px] font-bold text-white/60">Live</span>
+          </div>
+          <div className="rounded-[12px] bg-white/90 p-2 dark:bg-black/20">
+            <BalanceLineChart points={balanceSparkPoints} compact />
+          </div>
+        </div>
       </section>
 
-      <section>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Dompet</p>
@@ -254,7 +383,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <button
             type="button"
             onClick={() => navigate?.("wallets")}
-            className="bg-transparent text-xs font-black text-rose-dark transition hover:opacity-80"
+            className="rounded-full border border-line bg-panel-strong px-3 py-1.5 text-xs font-black text-rose-dark transition hover:bg-rose-bg"
           >
             Kelola
           </button>
@@ -263,10 +392,15 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
         {accountBalances.length ? (
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {accountBalances.map((wallet: Account, index: number) => (
-              <button
+              <motion.button
                 key={wallet.id}
                 type="button"
                 onClick={() => openWalletDetail(wallet)}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.06, duration: 0.3 }}
+                whileTap={{ scale: 0.98 }}
                 className={cn(
                   "min-w-[230px] snap-start rounded-[26px] p-4 text-left text-white shadow-soft transition hover:-translate-y-0.5",
                   walletGradients[index % walletGradients.length],
@@ -286,17 +420,31 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
                 <p className="mt-1 text-[10px] font-bold text-white/75">
                   {wallet.isActive ? "Aktif" : "Nonaktif"} · ketuk untuk detail & alokasi
                 </p>
-              </button>
+              </motion.button>
             ))}
           </div>
         ) : (
-          <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 text-sm text-muted-foreground shadow-soft">
-            Belum ada dompet keluarga.
+          <section className="rounded-[28px] border border-dashed border-line-strong bg-panel-strong/90 p-6 text-center shadow-soft">
+            <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-soft text-lg">👛</div>
+            <h3 className="mt-3 font-display text-sm font-black text-ink">Belum ada dompet</h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Buat dompet pertama untuk mulai mencatat pemasukan & pengeluaran keluarga.</p>
+            <button
+              type="button"
+              onClick={() => navigate?.("wallets")}
+              className="mt-3 inline-flex rounded-full border border-white/40 bg-[image:var(--gradient-brand)] px-4 py-2 text-xs font-black text-white shadow-accent"
+            >
+              Buat Dompet
+            </button>
           </section>
         )}
-      </section>
+      </motion.section>
 
-      <section>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.32, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Alokasi Periode Ini</p>
@@ -306,7 +454,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <button
             type="button"
             onClick={() => navigate?.("budgets")}
-            className="bg-transparent text-xs font-black text-rose-dark transition hover:opacity-80"
+            className="rounded-full border border-line bg-panel-strong px-3 py-1.5 text-xs font-black text-rose-dark transition hover:bg-rose-bg"
           >
             Lihat semua
           </button>
@@ -371,9 +519,14 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
             )}
           </div>
         </section>
-      </section>
+      </motion.section>
 
-      <section>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.32, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Aktivitas</p>
@@ -382,7 +535,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <button
             type="button"
             onClick={() => navigate?.("transactions")}
-            className="bg-transparent text-xs font-black text-rose-dark transition hover:opacity-80"
+            className="rounded-full border border-line bg-panel-strong px-3 py-1.5 text-xs font-black text-rose-dark transition hover:bg-rose-bg"
           >
             Semua
           </button>
@@ -390,10 +543,17 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
 
         <div className="grid gap-2.5">
           {latestTransactions.length ? (
-            latestTransactions.map((trx: Transaction) => {
+            latestTransactions.map((trx: Transaction, idx: number) => {
               const isIncome = trx.type === "income";
               return (
-                <div key={trx.id} className="flex items-center gap-3 rounded-[22px] border border-line bg-panel p-3 shadow-soft">
+                <motion.div
+                  key={trx.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.05, duration: 0.28 }}
+                  className="flex items-center gap-3 rounded-[22px] border border-line bg-panel p-3 shadow-soft"
+                >
                   <span
                     className={cn(
                       "grid size-10 shrink-0 place-items-center rounded-2xl text-lg font-black",
@@ -412,16 +572,18 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
                     {isIncome ? "+" : "-"}
                     {formatRupiah(trx.amount)}
                   </strong>
-                </div>
+                </motion.div>
               );
             })
           ) : (
-            <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 text-sm text-muted-foreground shadow-soft">
-              Belum ada transaksi.
+            <section className="rounded-[28px] border border-dashed border-line-strong bg-panel-strong/90 p-6 text-center shadow-soft">
+              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-soft text-lg">📝</div>
+              <h3 className="mt-3 font-display text-sm font-black text-ink">Belum ada transaksi</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Tap tombol + di tengah untuk mencatat pemasukan atau pengeluaran pertama.</p>
             </section>
           )}
         </div>
-      </section>
+      </motion.section>
 
       <FinanceDetailModal
         open={detail.open}

@@ -127,3 +127,67 @@ export function TrendBars({ periods }: { periods: TrendPeriod[] }) {
     </div>
   );
 }
+
+export interface BalancePoint {
+  label: string;
+  fullLabel: string;
+  isActive: boolean;
+  balance: number;
+}
+
+export function BalanceLineChart({ points, compact = false }: { points: BalancePoint[]; compact?: boolean }) {
+  if (!points.length) return null;
+  const values = points.map((p) => p.balance);
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const w = compact ? 320 : 480;
+  const h = compact ? 72 : 120;
+  const pad = compact ? 10 : 16;
+  const stepX = (w - pad * 2) / Math.max(1, points.length - 1);
+
+  const getY = (v: number) => h - pad - ((v - min) / range) * (h - pad * 2);
+  const getX = (i: number) => pad + i * stepX;
+
+  const linePath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i).toFixed(1)} ${getY(p.balance).toFixed(1)}`)
+    .join(" ");
+  const areaPath = `${linePath} L ${getX(points.length - 1).toFixed(1)} ${(h - pad).toFixed(1)} L ${getX(0).toFixed(1)} ${(h - pad).toFixed(1)} Z`;
+
+  return (
+    <div className="grid gap-2">
+      <svg viewBox={`0 0 ${w} ${h}`} className={`w-full ${compact ? "h-[72px]" : "h-[120px]"}`} role="img" aria-label="Tren saldo">
+        <defs>
+          <linearGradient id="balanceLineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="var(--rose-strong)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--rose-strong)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#balanceLineGrad)" />
+        <path d={linePath} fill="none" stroke="var(--rose-strong)" strokeWidth={compact ? 2 : 2.5} strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <g key={`${p.label}-${i}`}>
+            <circle cx={getX(i)} cy={getY(p.balance)} r={p.isActive ? (compact ? 4 : 5) : 3.5} fill={p.isActive ? "var(--rose-strong)" : "var(--panel-solid)"} stroke="var(--rose-strong)" strokeWidth={1.5} />
+            {!compact && (
+              <text x={getX(i)} y={h - 2} textAnchor="middle" className="fill-muted-foreground text-[9px] font-black">
+                {p.label}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      {!compact && (
+        <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-muted-foreground">
+          {points.map((p) => (
+            <span
+              key={p.label}
+              className={`rounded-full border px-2 py-1 ${p.isActive ? "border-rose-border bg-rose-bg text-rose-dark" : "border-line bg-soft"}`}
+            >
+              {p.label}: {formatCompact(p.balance)}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
