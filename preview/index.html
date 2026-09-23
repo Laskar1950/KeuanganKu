@@ -183,6 +183,7 @@
                       <small>afrizal@email.com</small>
                     </div>
                     <button class="dashboard-profile-mini-item" type="button" data-action="profile-mini" role="menuitem"><span data-icon="user-round" data-size="16"></span> Profil Akun</button>
+                    <button class="dashboard-profile-mini-item" type="button" data-action="settings-mini" role="menuitem"><span data-icon="settings" data-size="16"></span> Pengaturan</button>
                     <button class="dashboard-profile-mini-item danger" type="button" data-action="logout-mini" role="menuitem"><span data-icon="logout" data-size="16"></span> Logout</button>
                   </div>
                 </div>
@@ -197,7 +198,8 @@
                 </div>
               </header>
 
-              <div class="card dashboard-notification-panel" id="notifPanel" hidden>
+              <div id="notifBackdrop" hidden style="position:fixed;inset:0;z-index:25;background:rgba(0,0,0,0.08);backdrop-filter:blur(2px)"></div>
+              <div class="card dashboard-notification-panel dashboard-notification-overlay" id="notifPanel" hidden role="dialog" aria-label="Notifikasi">
                 <div class="row-between">
                   <div>
                     <p class="section-kicker">Notifikasi</p>
@@ -229,10 +231,6 @@
                     <span>Pengeluaran bulan ini</span>
                     <strong id="monthExpense">Rp 4.610.000</strong>
                   </div>
-                </div>
-                <div class="dashboard-sparkline-wrap">
-                  <div class="dashboard-sparkline-head"><span>Tren saldo 6 periode</span><em>Live</em></div>
-                  <div class="dashboard-sparkline" id="dashSparkline"></div>
                 </div>
               </section>
 
@@ -451,21 +449,10 @@
                 </div>
               </section>
 
-              <section class="reports-basic-card">
-                <div class="reports-basic-card-title">
-                  <div>
-                    <h2>Filter laporan</h2>
-                    <p>Pilih periode, dompet, atau alokasi tertentu.</p>
-                  </div>
-                  <button type="button" id="repReset">Reset</button>
-                </div>
-                <div class="reports-basic-filter-grid">
-                  <label>Bulan<select id="repMonth"></select></label>
-                  <label>Tahun<select id="repYear"></select></label>
-                  <label>Dompet<select id="repWallet"></select></label>
-                  <label>Alokasi<select id="repBudget"></select></label>
-                </div>
-              </section>
+              <div class="reports-filter-bar">
+                <button type="button" id="repFilterBtn" class="reports-filter-btn"><span data-icon="filter" data-size="14"></span> Filter <span id="repFilterBadge" class="filter-badge" hidden>•0</span></button>
+                <button type="button" id="repExportExcel" class="primary-btn reports-export-btn"><span data-icon="download" data-size="14"></span> Export Excel</button>
+              </div>
 
               <section class="reports-basic-summary-grid" id="repSummary"></section>
 
@@ -496,6 +483,28 @@
                   <div><h2>Transaksi periode ini</h2><p>Daftar transaksi terbaru sesuai filter laporan.</p></div>
                 </div>
                 <div class="reports-basic-transaction-list" id="repTransactions"></div>
+              </section>
+            </div>
+            <div class="sheet-backdrop" id="reportFilterBackdrop" hidden>
+              <section class="allocation-picker-sheet">
+                <div class="allocation-picker-header">
+                  <div>
+                    <p class="section-kicker">Filter laporan</p>
+                    <h3>Pilih periode & filter</h3>
+                    <small>Filter memengaruhi ringkasan, grafik, dan Excel.</small>
+                  </div>
+                  <button type="button" class="icon-btn" id="reportFilterClose" aria-label="Tutup filter"><span data-icon="x"></span></button>
+                </div>
+                <div class="reports-basic-filter-grid">
+                  <label>Bulan<select id="repMonth"></select></label>
+                  <label>Tahun<select id="repYear"></select></label>
+                  <label>Dompet<select id="repWallet"></select></label>
+                  <label>Alokasi<select id="repBudget"></select></label>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:14px">
+                  <button type="button" id="repReset" class="secondary-btn" style="flex:1"><span data-icon="rotate-ccw" data-size="14"></span> Reset</button>
+                  <button type="button" id="reportFilterApply" class="primary-btn" style="flex:1">Terapkan</button>
+                </div>
               </section>
             </div>
 

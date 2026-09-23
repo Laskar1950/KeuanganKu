@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { Download, Filter, Loader2 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { BalanceLineChart, DonutChart, TrendBars } from "@/components/ReportCharts";
+import ReportFilterSheet from "@/components/ReportFilterSheet";
+import { dummyAccounts, dummyBudgets, dummyTransactions } from "@/mocks/reportDummy";
 import { DONUT_PALETTE } from "@/utils/chartPalette";
 import { cn } from "@/lib/utils";
 import {
@@ -85,12 +88,29 @@ function SummaryCard({ label, value, note, tone = "default" }: SummaryCardProps)
 }
 
 export default function Reports() {
-  const { transactions = [], accounts = [], budgets = [] } = useApp() as {
+  const {
+    transactions: rawTransactions = [],
+    accounts: rawAccounts = [],
+    budgets: rawBudgets = [],
+    household,
+    notify,
+    familyMembers = [],
+  } = useApp() as {
     transactions?: FlexibleTransaction[];
     accounts?: Account[];
     budgets?: FlexibleBudget[];
+    household?: { name?: string } | null;
+    notify?: (msg: string) => void;
+    familyMembers?: import("@/types").FamilyMember[];
   };
   const currentCycle = getCurrentBudgetCycle();
+
+  const enableDummy =
+    import.meta.env.DEV && (import.meta.env.VITE_ENABLE_DUMMY_REPORT ?? "true") !== "false" && rawAccounts.length === 0 && rawBudgets.length === 0;
+
+  const transactions = enableDummy ? (dummyTransactions as FlexibleTransaction[]) : rawTransactions;
+  const accounts = enableDummy ? (dummyAccounts as Account[]) : rawAccounts;
+  const budgets = enableDummy ? (dummyBudgets as FlexibleBudget[]) : rawBudgets;
 
   const [month, setMonth] = useState(Number(currentCycle.month));
   const [year, setYear] = useState(Number(currentCycle.year));
@@ -219,6 +239,62 @@ export default function Reports() {
 
   const netTotal = incomeTotal - expenseTotal;
 
+  const [exporting, setExporting] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+
+  const activeFilterCount = (() => {
+    let c = 0;
+    if (month !== Number(currentCycle.month) || year !== Number(currentCycle.year)) c += 1;
+    if (accountId !== "all") c += 1;
+    if (budgetId !== "all") c += 1;
+    return c;
+  })();
+
+  const handleExportExcel = async () => {
+    if (exporting) return;
+    try {
+      setExporting(true);
+      const { exportReportsExcel } = await import("@/utils/exportExcel");
+      const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
+      const budgetNameById = new Map(budgets.map((b) => [b.id, b.name]));
+      const memberNameById = new Map((familyMembers as import("@/types").FamilyMember[]).map((m) => [m.userId, m.profile?.name || m.profile?.email || ""]));
+      const monthLabel = MONTHS.find((m) => m.value === Number(month))?.label || String(month);
+      const accountLabel = accountId === "all" ? "Semua dompet" : accountNameById.get(accountId) || accountId;
+      const budgetLabel = budgetId === "all" ? "Semua alokasi" : budgetNameById.get(budgetId) || budgetId;
+      const filterSummary = `Bulan: ${monthLabel} ${year} • Dompet: ${accountLabel} • Alokasi: ${budgetLabel}`;
+
+      await exportReportsExcel({
+        householdName: household?.name || "Keluarga",
+        periodLabel: formatBudgetCycleRange(selectedCycle),
+        periodStartKey: selectedCycle.startKey,
+        periodEndKey: selectedCycle.endKey,
+        filterSummary,
+        month: Number(month),
+        year: Number(year),
+        accountNameById,
+        budgetNameById,
+        memberNameById,
+        incomeTotal,
+        expenseTotal,
+        netTotal,
+        allocationTotal,
+        overBudgetTotal,
+        periodBudgetsCount: periodBudgets.length,
+        filteredTransactionsCount: filteredTransactions.length,
+        allocationRows,
+        trendPeriods,
+        balancePoints,
+        filteredTransactions: filteredTransactions as unknown as never,
+        latestTransactions: latestTransactions as unknown as never,
+      });
+      notify?.(`Laporan diekspor — ${filteredTransactions.length} transaksi, ${periodBudgets.length} alokasi.`);
+    } catch (error) {
+      notify?.(error instanceof Error ? error.message : "Gagal mengekspor Excel.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <main className="flex flex-col gap-4 pb-28">
       <motion.section
@@ -259,71 +335,28 @@ export default function Reports() {
         </div>
       </motion.section>
 
-      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg tracking-tight text-ink">Filter laporan</h2>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">Pilih periode, dompet, atau alokasi tertentu.</p>
-          </div>
-          <button
-            type="button"
-            onClick={resetFilter}
-            className="shrink-0 rounded-full border border-line bg-panel-strong px-3.5 py-2.5 text-xs font-black text-rose-dark transition hover:bg-rose-bg"
-          >
-            Reset
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-2">
-            <label className={labelClassName}>Bulan</label>
-            <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className={selectClassName}>
-              {MONTHS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className={labelClassName}>Tahun</label>
-            <select value={year} onChange={(event) => setYear(Number(event.target.value))} className={selectClassName}>
-              {yearOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className={labelClassName}>Dompet</label>
-            <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className={selectClassName}>
-              <option value="all">Semua dompet</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className={labelClassName}>Alokasi</label>
-            <select value={budgetId} onChange={(event) => setBudgetId(event.target.value)} className={selectClassName}>
-              <option value="all">Semua alokasi</option>
-              {budgets
-                .filter((budget) => Number(budget.month) === Number(month) && Number(budget.year) === Number(year))
-                .map((budget) => (
-                  <option key={budget.id} value={budget.id}>
-                    {budget.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-      </section>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowFilter(true)}
+          aria-expanded={showFilter}
+          aria-controls="report-filter-sheet"
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-line bg-panel-strong px-4 py-3 text-xs font-black text-ink shadow-soft transition hover:bg-soft"
+        >
+          <Filter size={16} /> Filter
+          {activeFilterCount > 0 && <span className="rounded-full bg-rose-bg px-2 py-0.5 text-[11px] font-black text-rose-dark">•{activeFilterCount}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          disabled={exporting}
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/40 bg-[image:var(--gradient-brand)] px-4 py-3 text-xs font-black text-white shadow-accent transition hover:opacity-95 disabled:opacity-50"
+          aria-busy={exporting}
+        >
+          {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+          {exporting ? "Mempersiapkan..." : "Export Excel"}
+        </button>
+      </div>
 
       <section className="grid grid-cols-2 gap-3">
         {[0, 1, 2, 3].map((idx) => {
@@ -481,6 +514,25 @@ export default function Reports() {
           )}
         </div>
       </section>
+
+      <ReportFilterSheet
+        open={showFilter}
+        onClose={() => setShowFilter(false)}
+        month={Number(month)}
+        year={Number(year)}
+        accountId={accountId}
+        budgetId={budgetId}
+        yearOptions={yearOptions}
+        accounts={accounts as { id: string; name: string }[]}
+        budgets={budgets as { id: string; name: string; month: number; year: number }[]}
+        onChangeMonth={(v) => setMonth(v)}
+        onChangeYear={(v) => setYear(v)}
+        onChangeAccount={(v) => setAccountId(v)}
+        onChangeBudget={(v) => setBudgetId(v)}
+        onReset={resetFilter}
+        onApply={() => setShowFilter(false)}
+        activeCount={activeFilterCount}
+      />
     </main>
   );
 }

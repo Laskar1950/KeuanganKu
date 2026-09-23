@@ -440,6 +440,13 @@ label { display: block; }
 .dashboard-profile-mini-item:hover { background: var(--rose-bg); color: var(--rose-strong); }
 .dashboard-profile-mini-item.danger { color: var(--red); }
 .dashboard-profile-mini-item.danger:hover { background: var(--red-bg); }
+.dashboard-page { position: relative; }
+.wallet-eye-btn {
+  width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center;
+  background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.18);
+}
+.wallet-eye-btn:hover { background: rgba(255,255,255,0.32); }
+.wallet-main-btn { text-align: left; width: 100%; background: none; border: 0; padding: 0; margin: 0; display: block; }
 .dashboard-user-avatar {
   width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center;
   color: var(--on-accent); background: var(--gradient-brand); font-weight: 900; font-size: 16px;
@@ -448,13 +455,18 @@ label { display: block; }
 .brand-copy { display: flex; flex-direction: column; }
 .brand-copy small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; }
 .brand-copy strong { font-family: var(--font-display); font-size: 17px; letter-spacing: -0.03em; }
-.dashboard-header-actions { display: flex; align-items: center; gap: 8px; }
+.dashboard-header-actions { display: flex; align-items: center; gap: 6px; }
 .notification-dot {
   position: absolute; top: -4px; right: -4px; min-width: 19px; height: 19px; padding: 0 4px;
   border-radius: 999px; background: var(--rose-strong); color: #fff; font-size: 10px; font-weight: 900;
   display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg-soft);
 }
 .dashboard-notification-panel { padding: 15px; animation: pageIn 0.2s ease; }
+.dashboard-notification-overlay {
+  position: absolute; top: 62px; left: 16px; right: 16px; z-index: 30;
+  max-height: 68vh; overflow-y: auto; scrollbar-width: none;
+}
+.dashboard-notification-overlay::-webkit-scrollbar { display: none; }
 .dashboard-notification-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .notification-row {
   display: flex; flex-direction: column; gap: 2px; text-align: left;
@@ -670,6 +682,11 @@ label { display: block; }
 .reports-basic-card-title p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 .reports-basic-card-title button { color: var(--rose-strong); font-size: 12px; font-weight: 900; padding: 7px 12px; border-radius: 999px; }
 .reports-basic-card-title button:hover { background: var(--rose-bg); }
+.reports-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+.reports-filter-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; font-weight: 900; color: var(--ink); box-shadow: var(--shadow); }
+.reports-filter-btn:hover { background: var(--soft); }
+.filter-badge { background: var(--rose-bg); color: var(--rose-strong); border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 900; }
+.reports-export-btn { flex: 1; width: auto; padding: 12px 14px; font-size: 12px; border-radius: 999px; }
 .reports-basic-filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .reports-basic-filter-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 800; }
 

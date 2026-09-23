@@ -50,7 +50,8 @@
     'mail': '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
     'check': '<path d="M20 6 9 17l-5-5"/>',
     'plus-circle': '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-    'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'
+    'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>'
   };
 
   function icon(name, size) {
@@ -169,6 +170,8 @@
   /* ---------- State ---------- */
   let theme = loadTheme();
   let showBalance = true;
+  let walletVisible = {};
+  WALLETS.forEach(function (w) { walletVisible[w.id] = true; });
   let currentTab = 'dashboard';
   let currentPanel = 'menu';
   let sheetType = 'expense';
@@ -325,15 +328,18 @@
 
   function renderWalletCarousel() {
     var html = WALLETS.filter(function (w) { return w.active; }).map(function (w) {
-      return '<button type="button" class="playful-wallet-card ' + w.color + ' wallet-card-btn" data-action="wallet-detail" data-id="' + w.id + '">'
+      var vis = walletVisible[w.id] !== false;
+      return '<div class="playful-wallet-card ' + w.color + '">'
         + '<div class="playful-wallet-top"><span class="playful-wallet-icon">' + icon('wallet', 18) + '</span>'
-        + '<span class="wallet-type-pill">' + w.typeLabel + '</span></div>'
+        + '<span style="display:flex;gap:6px;align-items:center"><span class="wallet-type-pill">' + w.typeLabel + '</span>'
+        + '<button type="button" class="wallet-eye-btn" data-action="toggle-wallet-vis" data-id="' + w.id + '" aria-label="' + (vis ? 'Sembunyikan saldo ' + w.name : 'Tampilkan saldo ' + w.name) + '">' + icon(vis ? 'eye-off' : 'eye', 14) + '</button></span></div>'
+        + '<button type="button" class="wallet-main-btn" data-action="wallet-detail" data-id="' + w.id + '" style="text-align:left;width:100%;background:none;border:0;padding:0;margin:0;display:block">'
         + '<h3>' + w.name + '</h3>'
-        + '<strong>' + (showBalance ? rp(w.balance) : 'Rp ••••••') + '</strong>'
-        + '<p>Aktif • klik untuk detail transaksi & alokasi</p>'
-        + '</button>';
+        + '<strong>' + (vis ? rp(w.balance) : 'Rp ••••••') + '</strong>'
+        + '<p>' + (w.active ? 'Aktif' : 'Nonaktif') + ' • ketuk untuk detail & alokasi</p>'
+        + '</button></div>';
     }).join('');
-    $('#walletCarousel').innerHTML = html || '<div class="card">Belum ada dompet keluarga.</div>';
+    $('#walletCarousel').innerHTML = html || '<div class="card" style="text-align:center;padding:20px">Belum ada dompet keluarga.<br><button class="small-btn" type="button" data-goto-settings="wallets" style="margin-top:10px">Buat Dompet</button></div>';
   }
 
   function renderBudgetSummary() {
@@ -837,8 +843,17 @@
         else if (action === 'close-detail') closeDetail();
         else if (action === 'notif') {
           var n = NOTIFICATIONS.find(function (x) { return x.id === id; });
-          if (n) n.read = true;
-          renderNotifs();
+          if (n) {
+            n.read = true;
+            renderNotifs();
+            var p = document.getElementById('notifPanel');
+            var b = document.getElementById('notifBackdrop');
+            if (p) p.hidden = true;
+            if (b) b.hidden = true;
+            if (n.title && n.title.toLowerCase().indexOf('budget') !== -1) goTab('budgets');
+            else if (n.title && n.title.toLowerCase().indexOf('transaksi') !== -1) goTab('transactions');
+            else goTab('dashboard');
+          }
         } else if (action === 'edit-tx') {
           openSheet();
           toast('Mode edit transaksi: gunakan form bawah.');
@@ -901,6 +916,13 @@
           if (btn) btn.setAttribute('aria-expanded', 'false');
           goTab('settings'); setPanel('profile');
           toast('Membuka Profil Akun.');
+        } else if (action === 'settings-mini') {
+          var miniS = document.getElementById('dashProfileMini');
+          if (miniS) miniS.hidden = true;
+          var btnS = document.getElementById('dashAvatarBtn');
+          if (btnS) btnS.setAttribute('aria-expanded', 'false');
+          goTab('settings'); setPanel('menu');
+          toast('Membuka Pengaturan.');
         } else if (action === 'logout-mini') {
           var mini2 = document.getElementById('dashProfileMini');
           if (mini2) mini2.hidden = true;
@@ -908,6 +930,10 @@
           if (btn2) btn2.setAttribute('aria-expanded', 'false');
           toast('Berhasil logout.');
           showScreen('auth');
+        } else if (action === 'toggle-wallet-vis') {
+          walletVisible[id] = !walletVisible[id];
+          renderWalletCarousel();
+          return;
         }
         return;
       }
@@ -984,8 +1010,28 @@
       }
     });
 
-    $('#bellBtn').addEventListener('click', function () {
-      $('#notifPanel').hidden = !$('#notifPanel').hidden;
+    $('#bellBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var panel = $('#notifPanel');
+      var back = document.getElementById('notifBackdrop');
+      var willShow = panel.hidden;
+      panel.hidden = !willShow;
+      if (back) back.hidden = !willShow;
+      if (willShow) renderNotifs();
+    });
+    var notifBack = document.getElementById('notifBackdrop');
+    if (notifBack) notifBack.addEventListener('click', function () {
+      $('#notifPanel').hidden = true;
+      this.hidden = true;
+    });
+    document.addEventListener('click', function (e) {
+      var panel = $('#notifPanel');
+      var back = document.getElementById('notifBackdrop');
+      var bell = document.getElementById('bellBtn');
+      if (!panel || panel.hidden) return;
+      if (panel.contains(e.target) || (bell && bell.contains(e.target))) return;
+      panel.hidden = true;
+      if (back) back.hidden = true;
     });
     $('#notifAllRead').addEventListener('click', function () {
       NOTIFICATIONS.forEach(function (n) { n.read = true; });
@@ -1051,10 +1097,85 @@
       closeBudgetForm();
       renderAll();
     });
+    function updateReportFilterBadge() {
+      var count = 0;
+      if (report.month !== CYCLE_MONTH || report.year !== CYCLE_YEAR) count += 1;
+      if (report.wallet !== 'all') count += 1;
+      if (report.budget !== 'all') count += 1;
+      var badge = document.getElementById('repFilterBadge');
+      if (badge) {
+        if (count > 0) { badge.textContent = '•' + count; badge.hidden = false; }
+        else { badge.hidden = true; }
+      }
+    }
+    function openReportFilter() { document.getElementById('reportFilterBackdrop').hidden = false; }
+    function closeReportFilter() { document.getElementById('reportFilterBackdrop').hidden = true; }
+    var repFilterBtn = document.getElementById('repFilterBtn');
+    if (repFilterBtn) repFilterBtn.addEventListener('click', openReportFilter);
+    var reportFilterClose = document.getElementById('reportFilterClose');
+    if (reportFilterClose) reportFilterClose.addEventListener('click', closeReportFilter);
+    var reportFilterApply = document.getElementById('reportFilterApply');
+    if (reportFilterApply) reportFilterApply.addEventListener('click', function () { closeReportFilter(); renderReports(); });
+    var reportFilterBackdrop = document.getElementById('reportFilterBackdrop');
+    if (reportFilterBackdrop) reportFilterBackdrop.addEventListener('click', function (e) { if (e.target === this) closeReportFilter(); });
+    // wrap renderReports to also update badge
+    var _origRenderReports = renderReports;
+    renderReports = function () { _origRenderReports(); updateReportFilterBadge(); };
+    updateReportFilterBadge();
+
     $('#repReset').addEventListener('click', function () {
       report = { month: CYCLE_MONTH, year: CYCLE_YEAR, wallet: 'all', budget: 'all' };
       $('#repMonth').value = report.month; $('#repYear').value = report.year; $('#repWallet').value = 'all'; $('#repBudget').value = 'all';
       renderReports();
+      closeReportFilter();
+    });
+    var repExportBtn = document.getElementById('repExportExcel');
+    if (repExportBtn) repExportBtn.addEventListener('click', function () {
+      try {
+        var repTx = TRANSACTIONS.filter(function (t) {
+          if (txMonth(t) !== report.month || txYear(t) !== report.year) return false;
+          if (report.wallet !== 'all' && t.accountId !== report.wallet) return false;
+          if (report.budget !== 'all' && t.budgetId !== report.budget) return false;
+          return true;
+        });
+        var income = repTx.filter(function (t) { return t.type === 'income'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+        var expense = repTx.filter(function (t) { return t.type === 'expense'; }).reduce(function (s, t) { return s + t.amount; }, 0);
+        var budgets = BUDGETS.filter(function (b) {
+          if (Number(b.month) !== report.month || Number(b.year) !== report.year) return false;
+          if (report.wallet !== 'all' && b.accountId !== report.wallet) return false;
+          if (report.budget !== 'all' && b.id !== report.budget) return false;
+          return true;
+        });
+        var html = '<html><head><meta charset="UTF-8"><style>th{background:#1E293B;color:#fff;padding:8px;border:1px solid #E2E8F0;}td{padding:6px;border:1px solid #E2E8F0;font-size:11px;color:#1E293B}h2{font-family:sans-serif;color:#1E293B}h3{color:#1E293B}</style></head><body>';
+        html += '<h2>KeuanganKu — Laporan ' + report.month + '/' + report.year + ' (' + CYCLE_RANGE + ')</h2>';
+        html += '<p>Periode gajian: ' + CYCLE_RANGE + ' • Dicetak: ' + new Date().toLocaleString('id-ID') + '</p>';
+        html += '<h3>Ringkasan</h3><table><tr><th>Kategori</th><th>Nominal</th></tr>';
+        html += '<tr><td>Pemasukan</td><td>Rp ' + income.toLocaleString('id-ID') + '</td></tr>';
+        html += '<tr><td>Pengeluaran</td><td>Rp ' + expense.toLocaleString('id-ID') + '</td></tr>';
+        html += '<tr><td>Net</td><td>Rp ' + (income - expense).toLocaleString('id-ID') + '</td></tr>';
+        html += '<tr><td>Total Alokasi</td><td>Rp ' + budgets.reduce(function (s, b) { return s + Number(b.amount || 0); }, 0).toLocaleString('id-ID') + '</td></tr>';
+        html += '</table>';
+        html += '<h3>Alokasi</h3><table><tr><th>Alokasi</th><th>Anggaran</th><th>Terpakai</th><th>Sisa</th></tr>';
+        budgets.forEach(function (b) {
+          var u = budgetUsage(b, repTx);
+          html += '<tr><td>' + b.name + '</td><td>Rp ' + Number(b.amount).toLocaleString('id-ID') + '</td><td>Rp ' + u.used.toLocaleString('id-ID') + '</td><td>Rp ' + u.remaining.toLocaleString('id-ID') + '</td></tr>';
+        });
+        html += '</table>';
+        html += '<h3>Transaksi (' + repTx.length + ')</h3><table><tr><th>Tanggal</th><th>Tipe</th><th>Catatan</th><th>Nominal</th></tr>';
+        repTx.slice(0, 100).forEach(function (t) {
+          html += '<tr><td>' + fmtDate(t.date) + '</td><td>' + t.type + '</td><td>' + t.note + '</td><td>Rp ' + Number(t.amount).toLocaleString('id-ID') + '</td></tr>';
+        });
+        html += '</table></body></html>';
+        var blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'KeuanganKu_Laporan_' + report.month + '-' + report.year + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+        toast('Laporan diekspor — ' + repTx.length + ' transaksi (preview .xls).');
+      } catch (e) { toast('Gagal export: ' + (e.message || e)); }
     });
     var themeCycle = ['auto', 'light', 'dark'];
     var themeBtn = document.getElementById('themeToggleBtn');

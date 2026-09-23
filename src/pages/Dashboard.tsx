@@ -1,20 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Bell, Eye, EyeOff, LogOut, Moon, Palette, Sun, UserRound, Wallet } from "lucide-react";
+import { Bell, Eye, EyeOff, LogOut, Moon, Palette, Settings, Sun, UserRound, Wallet } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { ProgressBar } from "@/components/UI";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
-import { BalanceLineChart } from "@/components/ReportCharts";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
-import {
-  getBudgetCycleTransactions,
-  getCurrentBudgetCycle,
-  formatBudgetCycleRange,
-  getBudgetCycleRange,
-  isDateInBudgetCycle,
-} from "@/utils/budgetCycle";
+import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange } from "@/utils/budgetCycle";
 import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
 import type { Account, AppNotification, Budget, Transaction } from "@/types";
 
@@ -96,16 +89,32 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
     logout,
   } = useApp();
 
-  const [showBalance, setShowBalance] = useState(true);
+  const [showTotalBalance, setShowTotalBalance] = useState(true);
+  const [walletVisibility, setWalletVisibility] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<{ open: boolean; type: string; item: unknown }>({ open: false, type: "", item: null });
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const notifRef = useRef<HTMLDivElement | null>(null);
   const [themePref, setThemePref] = useState(() => getThemePreference());
 
   const navigate = goTo || onNavigate;
 
   useEffect(() => subscribeTheme(({ preference }) => setThemePref(preference as typeof themePref)), []);
+
+  useEffect(() => {
+    setWalletVisibility((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      let changed = false;
+      accountBalances.forEach((w: Account) => {
+        if (!(w.id in next)) {
+          next[w.id] = true;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [accountBalances]);
 
   useEffect(() => {
     if (!showProfileMenu) return;
@@ -124,6 +133,26 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
       document.removeEventListener("keydown", handleEsc);
     };
   }, [showProfileMenu]);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        const bell = document.getElementById("dashboard-bell-btn");
+        if (bell && bell.contains(event.target as Node)) return;
+        setShowNotifications(false);
+      }
+    };
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowNotifications(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [showNotifications]);
 
   const activeCycle = useMemo(() => getCurrentBudgetCycle(), []);
   const currentMonthTransactions = useMemo(
@@ -154,24 +183,6 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
   }, 0);
   const budgetVariant = getProgressVariant(budgetProgressRaw, overBudgetAmount > 0);
 
-  const balanceSparkPoints = useMemo(() => {
-    const periods: { month: number; year: number }[] = [];
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const d = new Date(activeCycle.year, activeCycle.month - 1 - offset, 1);
-      periods.push({ month: d.getMonth() + 1, year: d.getFullYear() });
-    }
-    let running = 0;
-    return periods.map((p) => {
-      const cycle = getBudgetCycleRange(p.month, p.year);
-      const pts = transactions.filter((t: Transaction) => isDateInBudgetCycle((t as unknown as { transactionDate: string }).transactionDate || (t as unknown as { createdAt: string }).createdAt || "", cycle));
-      const inc = pts.filter((t: Transaction) => t.type === "income").reduce((s: number, t: Transaction) => s + Number(t.amount || 0), 0);
-      const exp = pts.filter((t: Transaction) => t.type === "expense").reduce((s: number, t: Transaction) => s + Number(t.amount || 0), 0);
-      running += inc - exp;
-      const label = new Date(p.year, p.month - 1, 1).toLocaleDateString("id-ID", { month: "short" }).slice(0, 3);
-      return { label, fullLabel: `${label} ${p.year}`, isActive: p.month === activeCycle.month && p.year === activeCycle.year, balance: running };
-    });
-  }, [activeCycle.month, activeCycle.year, transactions]);
-
   const openWalletDetail = (wallet: unknown) => setDetail({ open: true, type: "wallet", item: wallet });
   const openBudgetDetail = (budget: unknown) => setDetail({ open: true, type: "budget", item: budget });
   const closeDetail = () => setDetail({ open: false, type: "", item: null });
@@ -183,7 +194,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="relative flex flex-col gap-4">
       <motion.header
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -211,7 +222,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           {showProfileMenu && (
             <div
               role="menu"
-              className="absolute top-full left-0 z-30 mt-2 w-56 overflow-hidden rounded-[20px] border border-line-strong bg-panel-strong/95 p-1.5 shadow-soft backdrop-blur-xl"
+              className="absolute top-full left-0 z-30 mt-2 w-60 overflow-hidden rounded-[20px] border border-line-strong bg-panel-strong/95 p-1.5 shadow-soft backdrop-blur-xl"
             >
               <div className="px-3 py-2">
                 <p className="truncate text-xs font-black text-ink">{user?.name || "Pengguna"}</p>
@@ -232,6 +243,18 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
               <button
                 type="button"
                 role="menuitem"
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  navigate?.("settings");
+                }}
+                className="flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-left text-xs font-black text-ink transition hover:bg-soft hover:text-ink"
+              >
+                <Settings size={16} /> Pengaturan
+              </button>
+              <div className="my-1 h-px bg-line" />
+              <button
+                type="button"
+                role="menuitem"
                 onClick={async () => {
                   setShowProfileMenu(false);
                   try {
@@ -247,81 +270,93 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowNotifications((value) => !value)}
-          aria-label="Notifikasi"
-          className="relative grid size-11 shrink-0 place-items-center rounded-[18px] border border-line bg-panel text-rose-dark shadow-soft transition hover:bg-rose-bg"
-        >
-          <Bell size={18} />
-          {unreadNotifications.length > 0 && (
-            <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-red text-[10px] font-black text-white">
-              {unreadNotifications.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          aria-label="Ganti tema"
-          title={`Tema: ${themePref}`}
-          onClick={() => {
-            const next = themePref === "light" ? "dark" : themePref === "dark" ? "system" : "light";
-            setThemePreference(next);
-          }}
-          className="grid size-11 shrink-0 place-items-center rounded-[18px] border border-line bg-panel text-muted-foreground shadow-soft transition hover:bg-soft hover:text-ink"
-        >
-          {themePref === "dark" ? <Moon size={18} /> : themePref === "light" ? <Sun size={18} /> : <Palette size={18} />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            id="dashboard-bell-btn"
+            onClick={() => setShowNotifications((value) => !value)}
+            aria-label="Notifikasi"
+            aria-expanded={showNotifications}
+            className="relative grid size-11 shrink-0 place-items-center rounded-[18px] border border-line bg-panel text-rose-dark shadow-soft transition hover:bg-rose-bg"
+          >
+            <Bell size={18} />
+            {unreadNotifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-red text-[10px] font-black text-white">
+                {unreadNotifications.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label="Ganti tema"
+            title={`Tema: ${themePref}`}
+            onClick={() => {
+              const next = themePref === "light" ? "dark" : themePref === "dark" ? "system" : "light";
+              setThemePreference(next);
+            }}
+            className="grid size-11 shrink-0 place-items-center rounded-[18px] border border-line bg-panel text-muted-foreground shadow-soft transition hover:bg-soft hover:text-ink"
+          >
+            {themePref === "dark" ? <Moon size={18} /> : themePref === "light" ? <Sun size={18} /> : <Palette size={18} />}
+          </button>
+        </div>
       </motion.header>
 
       {showNotifications && (
-        <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Notifikasi</p>
-              <h2 className="font-display text-lg tracking-tight text-ink">Aktivitas terbaru</h2>
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={requestNotificationPermission}
-                className="rounded-full border border-line bg-panel-strong px-3 py-2 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
-              >
-                Aktifkan push
-              </button>
-              {unreadNotifications.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-20 bg-black/10 backdrop-blur-[2px]" onClick={() => setShowNotifications(false)} aria-hidden="true" />
+          <section
+            ref={notifRef}
+            className="absolute left-4 right-4 top-[64px] z-30 max-h-[68vh] overflow-y-auto rounded-[28px] border border-line-strong bg-panel-strong/95 p-4 shadow-soft-hover backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="dialog"
+            aria-label="Notifikasi"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Notifikasi</p>
+                <h2 className="font-display text-lg tracking-tight text-ink">Aktivitas terbaru</h2>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  onClick={markAllNotificationsRead}
+                  onClick={requestNotificationPermission}
                   className="rounded-full border border-line bg-panel-strong px-3 py-2 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
                 >
-                  Semua dibaca
+                  Aktifkan push
                 </button>
+                {unreadNotifications.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllNotificationsRead}
+                    className="rounded-full border border-line bg-panel-strong px-3 py-2 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
+                  >
+                    Semua dibaca
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2">
+              {notifications.length ? (
+                notifications.slice(0, 8).map((notification: AppNotification) => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => handleNotificationClick(notification)}
+                    className={cn(
+                      "rounded-2xl border border-line bg-soft p-3 text-left transition hover:border-line-strong hover:shadow-soft",
+                      notification.readAt && "opacity-65"
+                    )}
+                  >
+                    <strong className="mb-0.5 block text-[13px] font-black text-ink">{notification.title}</strong>
+                    <small className="text-[11px] text-muted-foreground">{notification.message || "Ada aktivitas baru."}</small>
+                  </button>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">Belum ada notifikasi.</p>
               )}
             </div>
-          </div>
-
-          <div className="mt-3 grid gap-2">
-            {notifications.length ? (
-              notifications.slice(0, 8).map((notification: AppNotification) => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  onClick={() => handleNotificationClick(notification)}
-                  className={cn(
-                    "rounded-2xl border border-line bg-soft p-3 text-left transition hover:border-line-strong",
-                    notification.readAt && "opacity-65"
-                  )}
-                >
-                  <strong className="mb-0.5 block text-[13px] font-black text-ink">{notification.title}</strong>
-                  <small className="text-[11px] text-muted-foreground">{notification.message || "Ada aktivitas baru."}</small>
-                </button>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">Belum ada notifikasi.</p>
-            )}
-          </div>
-        </section>
+          </section>
+        </>
       )}
 
       <section className="relative overflow-hidden rounded-[32px] p-5 text-white shadow-accent [background-image:var(--gradient-brand)]">
@@ -330,16 +365,17 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <div className="min-w-0">
             <p className="mb-1 text-xs font-extrabold text-white/80">Total Saldo Keluarga</p>
             <strong className="block font-display text-[clamp(26px,7.2vw,36px)] leading-none font-black tracking-[-0.06em] text-white">
-              {showBalance ? formatRupiah(totalBalance) : "Rp••••••••"}
+              {showTotalBalance ? formatRupiah(totalBalance) : "Rp••••••••"}
             </strong>
           </div>
           <button
             type="button"
-            onClick={() => setShowBalance((value) => !value)}
+            aria-label={showTotalBalance ? "Sembunyikan saldo total" : "Tampilkan saldo total"}
+            onClick={() => setShowTotalBalance((value) => !value)}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-white/25"
           >
-            {showBalance ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showBalance ? "Sembunyikan" : "Tampilkan"}
+            {showTotalBalance ? <EyeOff size={14} /> : <Eye size={14} />}
+            {showTotalBalance ? "Sembunyikan" : "Tampilkan"}
           </button>
         </div>
 
@@ -351,15 +387,6 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
           <div className="rounded-[20px] border border-white/20 bg-white/15 p-3">
             <span className="mb-1 block text-[10px] font-extrabold text-white/75">Pengeluaran bulan ini</span>
             <strong className="text-sm font-black tracking-tight text-white">{formatRupiah(monthlyExpense)}</strong>
-          </div>
-        </div>
-        <div className="relative z-10 mt-4 rounded-[18px] bg-white/12 p-2.5 backdrop-blur">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-black tracking-[0.08em] text-white/80 uppercase">Tren saldo 6 periode</span>
-            <span className="text-[10px] font-bold text-white/60">Live</span>
-          </div>
-          <div className="rounded-[12px] bg-white/90 p-2 dark:bg-black/20">
-            <BalanceLineChart points={balanceSparkPoints} compact />
           </div>
         </div>
       </section>
@@ -391,37 +418,52 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
 
         {accountBalances.length ? (
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {accountBalances.map((wallet: Account, index: number) => (
-              <motion.button
-                key={wallet.id}
-                type="button"
-                onClick={() => openWalletDetail(wallet)}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.06, duration: 0.3 }}
-                whileTap={{ scale: 0.98 }}
-                className={cn(
-                  "min-w-[230px] snap-start rounded-[26px] p-4 text-left text-white shadow-soft transition hover:-translate-y-0.5",
-                  walletGradients[index % walletGradients.length],
-                  !wallet.isActive && "opacity-70"
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="grid size-9 place-items-center rounded-xl bg-white/20">
-                    <Wallet size={18} />
-                  </span>
-                  <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-black uppercase">{wallet.type || "Dompet"}</span>
-                </div>
-                <h3 className="mt-3 truncate text-sm font-black">{wallet.name}</h3>
-                <strong className="mt-0.5 block font-display text-2xl font-black tracking-tight">
-                  {showBalance ? formatRupiah(wallet.currentBalance) : "Rp••••••"}
-                </strong>
-                <p className="mt-1 text-[10px] font-bold text-white/75">
-                  {wallet.isActive ? "Aktif" : "Nonaktif"} · ketuk untuk detail & alokasi
-                </p>
-              </motion.button>
-            ))}
+            {accountBalances.map((wallet: Account, index: number) => {
+              const isVisible = walletVisibility[wallet.id] !== false;
+              return (
+                <motion.div
+                  key={wallet.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.06, duration: 0.3 }}
+                  className={cn(
+                    "relative flex min-w-[230px] snap-start flex-col rounded-[26px] p-4 text-left text-white shadow-soft",
+                    walletGradients[index % walletGradients.length],
+                    !wallet.isActive && "opacity-70"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="grid size-9 place-items-center rounded-xl bg-white/20">
+                      <Wallet size={18} />
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-black uppercase">{wallet.type || "Dompet"}</span>
+                      <button
+                        type="button"
+                        aria-label={isVisible ? `Sembunyikan saldo ${wallet.name}` : `Tampilkan saldo ${wallet.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setWalletVisibility((prev) => ({ ...prev, [wallet.id]: !isVisible }));
+                        }}
+                        className="grid size-7 place-items-center rounded-full bg-white/20 text-white transition hover:bg-white/30"
+                      >
+                        {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => openWalletDetail(wallet)} className="mt-3 w-full text-left">
+                    <h3 className="truncate text-sm font-black">{wallet.name}</h3>
+                    <strong className="mt-0.5 block font-display text-2xl font-black tracking-tight">
+                      {isVisible ? formatRupiah(wallet.currentBalance) : "Rp••••••"}
+                    </strong>
+                    <p className="mt-1 text-[10px] font-bold text-white/75">
+                      {wallet.isActive ? "Aktif" : "Nonaktif"} · ketuk untuk detail & alokasi
+                    </p>
+                  </button>
+                </motion.div>
+              );
+            })}
           </div>
         ) : (
           <section className="rounded-[28px] border border-dashed border-line-strong bg-panel-strong/90 p-6 text-center shadow-soft">
