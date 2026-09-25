@@ -231,8 +231,8 @@ export default function Budgets() {
         className="px-0.5"
       >
         <p className="text-xs font-extrabold text-muted-foreground">Alokasi Anggaran</p>
-        <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">Budget keluarga</h1>
-        <small className="text-[11px] text-muted-foreground">Budget otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
+        <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">Anggaran keluarga</h1>
+        <small className="text-[11px] text-muted-foreground">Anggaran otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
       </motion.header>
 
       <section className="grid gap-4 rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
@@ -290,7 +290,7 @@ export default function Budgets() {
             </strong>
           </div>
           <div className={cn("rounded-[20px] border p-3", totals.overBudget > 0 ? "border-red-border bg-red-bg" : "border-line bg-soft")}>
-            <span className="block text-[10px] font-extrabold text-muted-foreground">Over budget</span>
+            <span className="block text-[10px] font-extrabold text-muted-foreground">Over anggaran</span>
             <strong className={cn("text-[13px] font-black", totals.overBudget > 0 ? "text-red" : "text-ink")}>
               {formatRupiah(totals.overBudget)}
             </strong>
@@ -312,7 +312,7 @@ export default function Budgets() {
             />
           </div>
           <small className="text-[11px] font-semibold text-muted-foreground">
-            {totalProgressRaw}% terpakai · {totals.overBudget > 0 ? "ada alokasi melewati budget" : "masih dalam batas alokasi"}
+            {totalProgressRaw}% terpakai · {totals.overBudget > 0 ? "ada alokasi melewati anggaran" : "masih dalam batas anggaran"}
           </small>
         </div>
       </section>

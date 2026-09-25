@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 
 const leftTabs = [
   { id: "dashboard", label: "Home", icon: Home },
-  { id: "transactions", label: "Catat", icon: ReceiptText },
+  { id: "transactions", label: "Riwayat", icon: ReceiptText },
 ];
 
 const rightTabs = [
-  { id: "budgets", label: "Budget", icon: Target },
+  { id: "budgets", label: "Anggaran", icon: Target },
   { id: "reports", label: "Laporan", icon: ChartNoAxesColumn },
 ];
 
@@ -54,7 +54,7 @@ export default function BottomNav({ activeTab, onChange, onAdd }: BottomNavProps
           type="button"
           onClick={onAdd}
           aria-label="Tambah transaksi"
-          className="grid size-14 shrink-0 place-items-center rounded-[20px] border border-white/50 text-on-accent shadow-[var(--accent-glow),inset_0_1px_0_rgba(255,255,255,0.4)] transition [background-image:var(--gradient-brand)] hover:[transform:translateY(-2px)_scale(1.03)] hover:shadow-[var(--shadow-hover),var(--accent-glow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-strong max-[390px]:size-[52px]"
+          className="grid size-14 shrink-0 place-items-center rounded-full border border-white/50 text-on-accent shadow-[var(--accent-glow),inset_0_1px_0_rgba(255,255,255,0.4)] transition [background-image:var(--gradient-brand)] hover:[transform:translateY(-2px)_scale(1.03)] hover:shadow-[var(--shadow-hover),var(--accent-glow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-strong max-[390px]:size-[52px]"
         >
           <Plus size={26} />
         </button>

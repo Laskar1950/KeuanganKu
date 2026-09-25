@@ -4,11 +4,10 @@ import { Bell, Eye, EyeOff, LogOut, Moon, Palette, Settings, Sun, UserRound, Wal
 import { useApp } from "@/context/AppContext";
 import { ProgressBar } from "@/components/UI";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
-import { BalanceLineChart, TrendBars, type Granularity, getExpenseIncomeStatus } from "@/components/ReportCharts";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
-import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange, getBudgetCycleRange, isDateInBudgetCycle } from "@/utils/budgetCycle";
+import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange } from "@/utils/budgetCycle";
 import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
 import type { Account, AppNotification, Budget, Transaction } from "@/types";
 
@@ -183,105 +182,6 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
     return sum + Math.max(0, Math.abs(Math.min(usage.remaining, 0)));
   }, 0);
   const budgetVariant = getProgressVariant(budgetProgressRaw, overBudgetAmount > 0);
-
-  const [trendGranularity, setTrendGranularity] = useState<Granularity>("6months");
-
-  const heroTrendPeriods = useMemo(() => {
-    const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const isInRange = (txDate: string, start: Date, end: Date) => {
-      const k = toKey(new Date(txDate));
-      return k >= toKey(start) && k <= toKey(end);
-    };
-    const amountByType = (txs: Transaction[], type: "income" | "expense") => txs.filter((t) => t.type === type).reduce((s, t) => s + Number(t.amount || 0), 0);
-    const getTxDate = (t: Transaction) => t.transactionDate || "";
-
-    if (trendGranularity === "daily") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
-      for (let offset = 13; offset >= 0; offset -= 1) {
-        const d = new Date(today);
-        d.setDate(today.getDate() - offset);
-        const label = d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
-        const fullLabel = d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
-        periods.push({ start: new Date(d), end: new Date(d), label, fullLabel, key: toKey(d) });
-      }
-      return periods.map((p, idx) => {
-        const pts = (transactions as Transaction[]).filter((t) => toKey(new Date(getTxDate(t))) === p.key);
-        return { month: p.start.getMonth() + 1, year: p.start.getFullYear(), label: p.label, fullLabel: p.fullLabel, key: p.key, isActive: idx === periods.length - 1, income: amountByType(pts, "income"), expense: amountByType(pts, "expense") };
-      });
-    }
-    if (trendGranularity === "weekly") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const dayOfWeek = (today.getDay() + 6) % 7;
-      const mondayThisWeek = new Date(today);
-      mondayThisWeek.setDate(today.getDate() - dayOfWeek);
-      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
-      for (let offset = 7; offset >= 0; offset -= 1) {
-        const start = new Date(mondayThisWeek);
-        start.setDate(mondayThisWeek.getDate() - offset * 7);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        const label = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}`;
-        const fullLabel = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })} - ${end.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}`;
-        periods.push({ start, end, label, fullLabel, key: `${toKey(start)}_${toKey(end)}` });
-      }
-      return periods.map((p, idx) => {
-        const pts = (transactions as Transaction[]).filter((t) => isInRange(getTxDate(t), p.start, p.end));
-        return { month: p.start.getMonth() + 1, year: p.start.getFullYear(), label: p.label, fullLabel: p.fullLabel, key: p.key, isActive: idx === periods.length - 1, income: amountByType(pts, "income"), expense: amountByType(pts, "expense") };
-      });
-    }
-    if (trendGranularity === "monthly") {
-      const base = new Date();
-      const periods: { month: number; year: number }[] = [];
-      for (let offset = 5; offset >= 0; offset -= 1) {
-        const d = new Date(base);
-        d.setMonth(base.getMonth() - offset);
-        periods.push({ month: d.getMonth() + 1, year: d.getFullYear() });
-      }
-      return periods.map((period) => {
-        const start = new Date(period.year, period.month - 1, 1);
-        const end = new Date(period.year, period.month, 0);
-        const pts = (transactions as Transaction[]).filter((t) => isInRange(getTxDate(t), start, end));
-        const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-        return { ...period, key: `${period.year}-${period.month}`, label: MONTHS[period.month - 1].slice(0, 3), fullLabel: `${MONTHS[period.month - 1]} ${period.year}`, isActive: period.month === base.getMonth() + 1 && period.year === base.getFullYear(), income: amountByType(pts, "income"), expense: amountByType(pts, "expense") };
-      });
-    }
-    if (trendGranularity === "yearly") {
-      const currentYear = new Date().getFullYear();
-      const periods: { year: number }[] = [];
-      for (let offset = 4; offset >= 0; offset -= 1) periods.push({ year: currentYear - offset });
-      return periods.map((period) => {
-        const start = new Date(period.year, 0, 1);
-        const end = new Date(period.year, 11, 31);
-        const pts = (transactions as Transaction[]).filter((t) => isInRange(getTxDate(t), start, end));
-        return { month: 1, year: period.year, label: String(period.year), fullLabel: String(period.year), key: String(period.year), isActive: period.year === currentYear, income: amountByType(pts, "income"), expense: amountByType(pts, "expense") };
-      });
-    }
-    // 6months: 6 siklus gajian 25-24
-    const now = new Date();
-    const curCycle = getCurrentBudgetCycle();
-    const periods: { month: number; year: number }[] = [];
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const date = new Date(curCycle.year, curCycle.month - 1 - offset, 1);
-      periods.push({ month: date.getMonth() + 1, year: date.getFullYear() });
-    }
-    return periods.map((period) => {
-      const cycle = getBudgetCycleRange(period.month, period.year);
-      const pts = (transactions as Transaction[]).filter((t) => isDateInBudgetCycle(getTxDate(t), cycle));
-      const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-      return { ...period, key: `${period.year}-${period.month}`, label: MONTHS[period.month - 1].slice(0, 3), fullLabel: `${MONTHS[period.month - 1]} ${period.year}`, isActive: period.month === curCycle.month && period.year === curCycle.year, income: amountByType(pts, "income"), expense: amountByType(pts, "expense") };
-    });
-  }, [transactions, trendGranularity]);
-
-  const heroBalancePoints = useMemo(() => {
-    let running = 0;
-    return heroTrendPeriods.map((p) => {
-      running += p.income - p.expense;
-      return { label: p.label, fullLabel: p.fullLabel, isActive: p.isActive, balance: running };
-    });
-  }, [heroTrendPeriods]);
 
   const openWalletDetail = (wallet: unknown) => setDetail({ open: true, type: "wallet", item: wallet });
   const openBudgetDetail = (budget: unknown) => setDetail({ open: true, type: "budget", item: budget });
@@ -496,85 +396,6 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-        className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl"
-      >
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Tren Realtime</p>
-            <h2 className="font-display text-lg tracking-tight text-ink">Pengeluaran vs Pendapatan</h2>
-            <small className="text-[11px] text-muted-foreground">
-              Seluruh keluarga • Realtime •{" "}
-              {trendGranularity === "daily"
-                ? "Harian (14 hari)"
-                : trendGranularity === "weekly"
-                  ? "Mingguan (8 minggu)"
-                  : trendGranularity === "monthly"
-                    ? "Bulanan (6 bulan)"
-                    : trendGranularity === "6months"
-                      ? "6 Siklus Gajian (25–24)"
-                      : "Tahunan (5 tahun)"}{" "}
-              • Relatif dari 0
-            </small>
-          </div>
-          <span className="shrink-0 rounded-full border border-green-border bg-green-bg px-2.5 py-1 text-[10px] font-black text-green">Live</span>
-        </div>
-
-        <div className="mb-3 flex flex-wrap gap-1 rounded-2xl border border-line bg-soft p-1">
-          {(
-            [
-              { key: "daily", label: "Harian" },
-              { key: "weekly", label: "Mingguan" },
-              { key: "monthly", label: "Bulanan" },
-              { key: "6months", label: "6 Bulan" },
-              { key: "yearly", label: "Tahunan" },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setTrendGranularity(opt.key)}
-              className={cn(
-                "flex-1 min-w-[56px] rounded-xl px-2.5 py-2 text-[11px] font-black transition",
-                trendGranularity === opt.key ? "bg-panel-strong text-ink shadow-soft border border-line-strong" : "text-muted-foreground hover:text-ink"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {(() => {
-          const totalInc = heroTrendPeriods.reduce((s, p) => s + p.income, 0);
-          const totalExp = heroTrendPeriods.reduce((s, p) => s + p.expense, 0);
-          const status = getExpenseIncomeStatus(totalInc, totalExp);
-          return (
-            <div className={cn("mb-3 rounded-2xl border p-3", status.tone === "surplus" ? "border-green-border bg-green-bg" : status.tone === "deficit" ? "border-red-border bg-red-bg" : "border-amber-500/20 bg-amber-500/10")}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className={cn("text-xs font-black", status.tone === "surplus" ? "text-green" : status.tone === "deficit" ? "text-red" : "text-amber-700")}>{status.label}</p>
-                  <p className="text-[11px] font-semibold text-muted-foreground">{status.description} • Selisih {formatRupiah(Math.abs(totalInc - totalExp))}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] font-bold text-muted-foreground">Total periode</p>
-                  <p className="text-xs font-black text-ink">Masuk {formatRupiah(totalInc)} • Keluar {formatRupiah(totalExp)}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        <TrendBars periods={heroTrendPeriods} />
-        <div className="mt-4">
-          <BalanceLineChart points={heroBalancePoints} compact />
-          <p className="mt-1 text-[11px] font-semibold text-muted-foreground">Saldo kumulatif relatif dari 0 — realtime via transaksi.</p>
-        </div>
-      </motion.section>
-
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
@@ -669,7 +490,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Alokasi Periode Ini</p>
-            <h2 className="font-display text-lg tracking-tight text-ink">Ringkasan budget</h2>
+            <h2 className="font-display text-lg tracking-tight text-ink">Ringkasan anggaran</h2>
             <small className="text-[11px] text-muted-foreground">{formatBudgetCycleRange(activeCycle.month, activeCycle.year)}</small>
           </div>
           <button
@@ -693,7 +514,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
             </div>
             <div>
               <span className="block text-[10px] font-extrabold text-muted-foreground">
-                {overBudgetAmount > 0 ? "Over budget" : "Progress"}
+                {overBudgetAmount > 0 ? "Over anggaran" : "Progress"}
               </span>
               <strong className={cn("text-[13px] font-black", overBudgetAmount > 0 ? "text-red" : "text-ink")}>
                 {overBudgetAmount > 0 ? `${budgetProgressRaw}% · Over ${formatRupiah(overBudgetAmount)}` : `${budgetProgressRaw}%`}

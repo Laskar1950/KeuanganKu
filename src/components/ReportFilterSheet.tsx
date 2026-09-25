@@ -20,6 +20,8 @@ const selectClassName =
   "h-12 w-full rounded-2xl border border-field-border bg-field-bg px-4 text-sm font-semibold text-ink outline-none focus:border-rose-strong focus:ring-4 focus:ring-rose-bg";
 const labelClassName = "text-xs font-extrabold tracking-wide text-muted-foreground";
 
+import type { Granularity } from "@/components/ReportCharts";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -27,6 +29,7 @@ interface Props {
   year: number;
   accountId: string;
   budgetId: string;
+  granularity: Granularity;
   yearOptions: number[];
   accounts: { id: string; name: string }[];
   budgets: { id: string; name: string; month: number; year: number }[];
@@ -34,6 +37,7 @@ interface Props {
   onChangeYear: (v: number) => void;
   onChangeAccount: (v: string) => void;
   onChangeBudget: (v: string) => void;
+  onChangeGranularity: (v: Granularity) => void;
   onReset: () => void;
   onApply: () => void;
   activeCount: number;
@@ -46,6 +50,7 @@ export default function ReportFilterSheet({
   year,
   accountId,
   budgetId,
+  granularity,
   yearOptions,
   accounts,
   budgets,
@@ -53,6 +58,7 @@ export default function ReportFilterSheet({
   onChangeYear,
   onChangeAccount,
   onChangeBudget,
+  onChangeGranularity,
   onReset,
   onApply,
 }: Props) {
@@ -131,6 +137,18 @@ export default function ReportFilterSheet({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="grid gap-2">
+            <label className={labelClassName}>Tampilan Tren</label>
+            <select value={granularity} onChange={(e) => onChangeGranularity(e.target.value as Granularity)} className={selectClassName}>
+              <option value="6months">6 Siklus Gajian (25–24) — Default</option>
+              <option value="monthly">Bulanan (Kalender)</option>
+              <option value="yearly">Tahunan</option>
+              <option value="weekly">Mingguan — Lainnya</option>
+              <option value="daily">Harian (Siklus) — Lainnya</option>
+            </select>
+            <small className="text-[11px] font-semibold text-muted-foreground">3 default ditampilkan di Laporan, lainnya via filter ini. Harian mengikuti siklus terpilih.</small>
           </div>
         </div>
 

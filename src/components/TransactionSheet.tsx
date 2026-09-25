@@ -613,7 +613,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
                 )}
                 {availableBudgets.length === 0 && (
                   <small className="text-[11px] font-semibold text-muted-foreground">
-                    Belum ada alokasi dari dompet milik Anda di periode ini. Buat alokasi dengan dompet Anda di Budget.
+                    Belum ada alokasi dari dompet milik Anda di periode ini. Buat alokasi dengan dompet Anda di Anggaran.
                   </small>
                 )}
                 <button

@@ -13,6 +13,7 @@ import {
   getCurrentBudgetCycle,
   isDateInBudgetCycle,
 } from "@/utils/budgetCycle";
+import { useTrendPeriods, useBalancePoints } from "@/hooks/useTrend";
 import type { Account, Budget, Transaction } from "@/types";
 
 const MONTHS = [
@@ -189,164 +190,8 @@ export default function Reports() {
 
   const donutTotal = useMemo(() => donutRows.reduce((total, row) => total + row.value, 0), [donutRows]);
 
-  // Granularity-aware trend (seluruh keluarga, relatif 0)
-  const trendPeriods = useMemo(() => {
-    const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const isInRange = (txDate: string, start: Date, end: Date) => {
-      const k = toKey(new Date(txDate));
-      return k >= toKey(start) && k <= toKey(end);
-    };
-
-    // 6months: 6 siklus gajian (25-24) — tetap relatif 0, seluruh keluarga
-    if (granularity === "6months") {
-      const periods: { month: number; year: number }[] = [];
-      for (let offset = 5; offset >= 0; offset -= 1) {
-        const date = new Date(Number(year), Number(month) - 1 - offset, 1);
-        periods.push({ month: date.getMonth() + 1, year: date.getFullYear() });
-      }
-      return periods.map((period) => {
-        const cycle = getBudgetCycleRange(period.month, period.year);
-        const periodTransactions = transactions.filter((transaction) => isDateInBudgetCycle(getTransactionDate(transaction), cycle));
-        return {
-          ...period,
-          key: `${period.year}-${period.month}`,
-          label: MONTHS[period.month - 1].label.slice(0, 3),
-          fullLabel: `${MONTHS[period.month - 1].label} ${period.year}`,
-          isActive: period.month === Number(month) && period.year === Number(year),
-          income: amountByType(periodTransactions, "income"),
-          expense: amountByType(periodTransactions, "expense"),
-        };
-      });
-    }
-
-    if (granularity === "daily") {
-      // 14 hari terakhir, harian
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
-      for (let offset = 13; offset >= 0; offset -= 1) {
-        const d = new Date(today);
-        d.setDate(today.getDate() - offset);
-        const label = d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
-        const fullLabel = d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
-        periods.push({ start: new Date(d), end: new Date(d), label, fullLabel, key: toKey(d) });
-      }
-      return periods.map((p, idx) => {
-        const pts = transactions.filter((t) => {
-          const kd = toKey(new Date(getTransactionDate(t)));
-          return kd === p.key;
-        });
-        return {
-          month: p.start.getMonth() + 1,
-          year: p.start.getFullYear(),
-          label: p.label,
-          fullLabel: p.fullLabel,
-          key: p.key,
-          startKey: p.key,
-          endKey: p.key,
-          isActive: idx === periods.length - 1,
-          income: amountByType(pts, "income"),
-          expense: amountByType(pts, "expense"),
-        };
-      });
-    }
-
-    if (granularity === "weekly") {
-      // 8 minggu terakhir, mingguan (Senin-Minggu)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const dayOfWeek = (today.getDay() + 6) % 7; // Senin=0
-      const mondayThisWeek = new Date(today);
-      mondayThisWeek.setDate(today.getDate() - dayOfWeek);
-      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
-      for (let offset = 7; offset >= 0; offset -= 1) {
-        const start = new Date(mondayThisWeek);
-        start.setDate(mondayThisWeek.getDate() - offset * 7);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        const label = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}`;
-        const fullLabel = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })} - ${end.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}`;
-        periods.push({ start, end, label, fullLabel, key: `${toKey(start)}_${toKey(end)}` });
-      }
-      return periods.map((p, idx) => {
-        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), p.start, p.end));
-        return {
-          month: p.start.getMonth() + 1,
-          year: p.start.getFullYear(),
-          label: p.label,
-          fullLabel: p.fullLabel,
-          key: p.key,
-          startKey: toKey(p.start),
-          endKey: toKey(p.end),
-          isActive: idx === periods.length - 1,
-          income: amountByType(pts, "income"),
-          expense: amountByType(pts, "expense"),
-        };
-      });
-    }
-
-    if (granularity === "monthly") {
-      // 6 bulan kalender terakhir
-      const periods: { month: number; year: number }[] = [];
-      const base = new Date(Number(year), Number(month) - 1, 1);
-      for (let offset = 5; offset >= 0; offset -= 1) {
-        const d = new Date(base);
-        d.setMonth(base.getMonth() - offset);
-        periods.push({ month: d.getMonth() + 1, year: d.getFullYear() });
-      }
-      return periods.map((period) => {
-        const start = new Date(period.year, period.month - 1, 1);
-        const end = new Date(period.year, period.month, 0);
-        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), start, end));
-        return {
-          ...period,
-          key: `${period.year}-${period.month}`,
-          label: MONTHS[period.month - 1].label.slice(0, 3),
-          fullLabel: `${MONTHS[period.month - 1].label} ${period.year}`,
-          isActive: period.month === Number(month) && period.year === Number(year),
-          income: amountByType(pts, "income"),
-          expense: amountByType(pts, "expense"),
-        };
-      });
-    }
-
-    if (granularity === "yearly") {
-      // 5 tahun terakhir
-      const currentYear = new Date().getFullYear();
-      const periods: { year: number }[] = [];
-      for (let offset = 4; offset >= 0; offset -= 1) {
-        periods.push({ year: currentYear - offset });
-      }
-      return periods.map((period) => {
-        const start = new Date(period.year, 0, 1);
-        const end = new Date(period.year, 11, 31);
-        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), start, end));
-        return {
-          month: 1,
-          year: period.year,
-          label: String(period.year),
-          fullLabel: String(period.year),
-          key: String(period.year),
-          startKey: toKey(start),
-          endKey: toKey(end),
-          isActive: period.year === currentYear,
-          income: amountByType(pts, "income"),
-          expense: amountByType(pts, "expense"),
-        };
-      });
-    }
-
-    // fallback 6months
-    return [];
-  }, [granularity, month, transactions, year]);
-
-  const balancePoints = useMemo(() => {
-    let running = 0;
-    return trendPeriods.map((p) => {
-      running += p.income - p.expense;
-      return { label: p.label, fullLabel: p.fullLabel, isActive: p.isActive, balance: running };
-    });
-  }, [trendPeriods]);
+  const trendPeriods = useTrendPeriods(granularity, transactions as Transaction[], Number(month), Number(year));
+  const balancePoints = useBalancePoints(trendPeriods);
 
   const latestTransactions = useMemo(() => {
     return [...filteredTransactions]
@@ -360,6 +205,7 @@ export default function Reports() {
     setYear(Number(nextCycle.year));
     setAccountId("all");
     setBudgetId("all");
+    setGranularity("6months");
   };
 
   const netTotal = incomeTotal - expenseTotal;
@@ -372,6 +218,7 @@ export default function Reports() {
     if (month !== Number(currentCycle.month) || year !== Number(currentCycle.year)) c += 1;
     if (accountId !== "all") c += 1;
     if (budgetId !== "all") c += 1;
+    if (granularity !== "6months") c += 1;
     return c;
   })();
 
@@ -489,7 +336,7 @@ export default function Reports() {
             { label: "Pemasukan", value: formatCurrency(incomeTotal), note: "Total transaksi masuk", tone: "income" as const },
             { label: "Pengeluaran", value: formatCurrency(expenseTotal), note: "Total transaksi keluar", tone: "expense" as const },
             { label: "Total alokasi", value: formatCurrency(allocationTotal), note: `${periodBudgets.length} alokasi`, tone: "default" as const },
-            { label: "Over budget", value: formatCurrency(overBudgetTotal), note: overBudgetTotal > 0 ? "Melewati batas" : "Masih aman", tone: (overBudgetTotal > 0 ? "expense" : "income") as const },
+            { label: "Over anggaran", value: formatCurrency(overBudgetTotal), note: overBudgetTotal > 0 ? "Melewati batas" : "Masih aman", tone: (overBudgetTotal > 0 ? "expense" : "income") as const },
           ];
           const c = cards[idx];
           return (
@@ -532,65 +379,130 @@ export default function Reports() {
         )}
       </section>
 
-      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 sm:p-5 shadow-soft backdrop-blur-xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg tracking-tight text-ink">Tren Arus Kas</h2>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">
-              Perbandingan pemasukan & pengeluaran — seluruh keluarga • Realtime •{" "}
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg tracking-tight text-ink">Tren Arus Kas</h2>
+              <span className="rounded-full border border-green-border bg-green-bg px-2 py-0.5 text-[10px] font-black text-green">Live</span>
+            </div>
+            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
               {granularity === "daily"
-                ? "Harian (14 hari)"
+                ? `Harian (Siklus ${formatBudgetCycleRange(selectedCycle)})`
                 : granularity === "weekly"
-                  ? "Mingguan (8 minggu)"
+                  ? "Mingguan (8 minggu terakhir)"
                   : granularity === "monthly"
                     ? "Bulanan (6 bulan kalender)"
                     : granularity === "6months"
                       ? "6 Siklus Gajian (25–24)"
-                      : "Tahunan (5 tahun)"}
+                      : "Tahunan (5 tahun terakhir)"}
             </p>
           </div>
-          <span className="shrink-0 rounded-full border border-green-border bg-green-bg px-2.5 py-1 text-[10px] font-black text-green">Live</span>
-        </div>
 
-        {/* Granularity switch */}
-        <div className="mb-3 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-soft p-1">
-          {(
-            [
-              { key: "daily", label: "Harian" },
-              { key: "weekly", label: "Mingguan" },
-              { key: "monthly", label: "Bulanan" },
-              { key: "6months", label: "6 Bulan" },
-              { key: "yearly", label: "Tahunan" },
-            ] as const
-          ).map((opt) => (
+          {/* 3 default + More (Filter trigger) */}
+          <div className="flex items-center gap-1 rounded-2xl border border-line bg-soft p-1">
             <button
-              key={opt.key}
               type="button"
-              onClick={() => setGranularity(opt.key)}
+              onClick={() => setGranularity("6months")}
               className={cn(
-                "flex-1 min-w-[64px] rounded-xl px-3 py-2 text-[11px] font-black transition",
-                granularity === opt.key ? "bg-panel-strong text-ink shadow-soft border border-line-strong" : "text-muted-foreground hover:text-ink"
+                "rounded-xl px-2.5 py-1.5 text-[11px] font-black transition",
+                granularity === "6months" ? "bg-panel-strong text-ink shadow-soft border border-line" : "text-muted-foreground hover:text-ink"
               )}
             >
-              {opt.label}
+              6 Siklus
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setGranularity("monthly")}
+              className={cn(
+                "rounded-xl px-2.5 py-1.5 text-[11px] font-black transition",
+                granularity === "monthly" ? "bg-panel-strong text-ink shadow-soft border border-line" : "text-muted-foreground hover:text-ink"
+              )}
+            >
+              Bulanan
+            </button>
+            <button
+              type="button"
+              onClick={() => setGranularity("yearly")}
+              className={cn(
+                "rounded-xl px-2.5 py-1.5 text-[11px] font-black transition",
+                granularity === "yearly" ? "bg-panel-strong text-ink shadow-soft border border-line" : "text-muted-foreground hover:text-ink"
+              )}
+            >
+              Tahunan
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilter(true)}
+              className={cn(
+                "flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition border",
+                (granularity === "daily" || granularity === "weekly")
+                  ? "border-rose-strong bg-rose-bg text-rose-dark"
+                  : "border-transparent text-muted-foreground hover:text-ink"
+              )}
+            >
+              <Filter size={11} />
+              <span>{granularity === "daily" ? "Harian" : granularity === "weekly" ? "Mingguan" : "Lainnya"}</span>
+            </button>
+          </div>
         </div>
 
         {(() => {
           const totalIncome = trendPeriods.reduce((s, p) => s + p.income, 0);
           const totalExpense = trendPeriods.reduce((s, p) => s + p.expense, 0);
           const status = getExpenseIncomeStatus(totalIncome, totalExpense);
+          const net = totalIncome - totalExpense;
           return (
-            <div className={cn("mb-3 rounded-2xl border p-3", status.tone === "surplus" ? "border-green-border bg-green-bg" : status.tone === "deficit" ? "border-red-border bg-red-bg" : "border-amber-500/20 bg-amber-500/10")}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className={cn(
+              "mb-4 rounded-[22px] border p-3.5 shadow-soft transition",
+              status.tone === "surplus"
+                ? "border-green-border bg-green-bg/60"
+                : status.tone === "deficit"
+                  ? "border-red-border bg-red-bg/60"
+                  : "border-line bg-soft"
+            )}>
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={cn(
+                    "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider",
+                    status.tone === "surplus"
+                      ? "bg-green text-white"
+                      : status.tone === "deficit"
+                        ? "bg-red text-white"
+                        : "bg-muted-foreground text-white"
+                  )}>
+                    {status.label}
+                  </span>
+                  <span className="text-[11px] font-semibold text-muted-foreground truncate">
+                    {status.description}
+                  </span>
+                </div>
+                <span className="text-[10px] font-black text-muted-foreground shrink-0 uppercase tracking-wider">
+                  {granularity === "daily" ? "Siklus Ini" : granularity === "weekly" ? "8 Minggu" : granularity === "yearly" ? "5 Tahun" : "6 Periode"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 border-t border-line/60 pt-2.5">
                 <div>
-                  <p className={cn("text-xs font-black", status.tone === "surplus" ? "text-green" : status.tone === "deficit" ? "text-red" : "text-amber-700")}>{status.label}</p>
-                  <p className="text-[11px] font-semibold text-muted-foreground">{status.description} • Selisih {formatCurrency(Math.abs(totalIncome - totalExpense))}</p>
+                  <span className="block text-[10px] font-bold text-muted-foreground">Pemasukan</span>
+                  <strong className="text-xs sm:text-[13px] font-black text-green tracking-tight">
+                    {formatCurrency(totalIncome)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-muted-foreground">Pengeluaran</span>
+                  <strong className="text-xs sm:text-[13px] font-black text-red tracking-tight">
+                    {formatCurrency(totalExpense)}
+                  </strong>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] font-bold text-muted-foreground">Total {granularity === "daily" ? "14 hari" : granularity === "weekly" ? "8 minggu" : granularity === "yearly" ? "5 tahun" : "6 periode"}</p>
-                  <p className="text-xs font-black text-ink">Masuk {formatCurrency(totalIncome)} • Keluar {formatCurrency(totalExpense)}</p>
+                  <span className="block text-[10px] font-bold text-muted-foreground">Selisih Bersih</span>
+                  <strong className={cn(
+                    "text-xs sm:text-[13px] font-black tracking-tight",
+                    net >= 0 ? "text-green" : "text-red"
+                  )}>
+                    {net >= 0 ? "+" : ""}{formatCurrency(net)}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -598,19 +510,24 @@ export default function Reports() {
         })()}
 
         <TrendBars periods={trendPeriods} />
-        <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Ketuk label periode untuk detail. Selisih ditampilkan di atas tiap kolom dengan tone profesional.</p>
       </section>
 
-      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 sm:p-5 shadow-soft backdrop-blur-xl">
+        <div className="mb-3.5 flex items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg tracking-tight text-ink">Tren Saldo (Realtime)</h2>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">Saldo kumulatif relatif dari 0 — {granularity === "daily" ? "harian" : granularity === "weekly" ? "mingguan" : granularity === "monthly" ? "bulanan" : granularity === "6months" ? "6 siklus" : "tahunan"} • Live</p>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg tracking-tight text-ink">Tren Saldo (Realtime)</h2>
+              <span className="rounded-full border border-green-border bg-green-bg px-2 py-0.5 text-[10px] font-black text-green">Live</span>
+            </div>
+            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+              Akumulasi saldo relatif dari 0 • {granularity === "daily" ? "Harian" : granularity === "weekly" ? "Mingguan" : granularity === "monthly" ? "Bulanan" : granularity === "6months" ? "6 Siklus" : "Tahunan"}
+            </p>
           </div>
-          <span className="shrink-0 rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-muted-foreground">Live</span>
         </div>
         <BalanceLineChart points={balancePoints} />
-        <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Relatif dari 0 untuk memudahkan komparasi tren; nilai akhir = net kumulatif periode.</p>
+        <p className="mt-2 text-[10.5px] font-semibold text-muted-foreground">
+          Garis saldo kumulatif (pemasukan dikurang pengeluaran) pada periode terpilih.
+        </p>
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
@@ -709,6 +626,7 @@ export default function Reports() {
         year={Number(year)}
         accountId={accountId}
         budgetId={budgetId}
+        granularity={granularity}
         yearOptions={yearOptions}
         accounts={accounts as { id: string; name: string }[]}
         budgets={budgets as { id: string; name: string; month: number; year: number }[]}
@@ -716,6 +634,7 @@ export default function Reports() {
         onChangeYear={(v) => setYear(v)}
         onChangeAccount={(v) => setAccountId(v)}
         onChangeBudget={(v) => setBudgetId(v)}
+        onChangeGranularity={(v) => setGranularity(v)}
         onReset={resetFilter}
         onApply={() => setShowFilter(false)}
         activeCount={activeFilterCount}

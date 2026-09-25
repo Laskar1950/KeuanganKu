@@ -177,7 +177,7 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
         <div>
           <p className="text-xs font-extrabold text-muted-foreground">Transaksi keluarga</p>
           <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">
-            Catatan Keuangan
+            Riwayat Keuangan
           </h1>
         </div>
         <button
@@ -189,28 +189,6 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
           <Plus size={18} />
         </button>
       </header>
-
-      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Input cepat</p>
-            <h2 className="font-display text-lg tracking-tight text-ink">Catat transaksi baru</h2>
-          </div>
-          <span className="shrink-0 rounded-full bg-violet-bg px-2.5 py-1.5 text-[10px] font-black text-violet">
-            Alokasi otomatis
-          </span>
-        </div>
-        <p className="mt-2 text-xs leading-relaxed font-semibold text-muted-foreground">
-          Untuk pengeluaran, pilih alokasi anggaran. Dompet akan otomatis mengikuti sumber anggaran pada alokasi tersebut.
-        </p>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
-        >
-          <Plus size={16} /> Tambah Transaksi
-        </button>
-      </section>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-[24px] border border-green-border bg-green-bg p-3.5">
