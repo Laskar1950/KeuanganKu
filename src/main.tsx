@@ -11,7 +11,12 @@ import "./tokens.css";
 
 initTheme();
 
-registerSW({ immediate: true });
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateSW(true);
+  },
+});
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

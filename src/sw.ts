@@ -7,6 +7,11 @@ import { precacheAndRoute } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { clientsClaim } from 'workbox-core';
+
+// Langsung aktifkan SW baru dan claim clients tanpa menunggu tab ditutup
+self.skipWaiting();
+clientsClaim();
 
 // Precache injected by vite-plugin-pwa (injectManifest)
 precacheAndRoute(self.__WB_MANIFEST);
