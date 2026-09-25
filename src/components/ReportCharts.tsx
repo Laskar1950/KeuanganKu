@@ -6,6 +6,8 @@ export interface DonutRow {
   value: number;
 }
 
+export type Granularity = "daily" | "weekly" | "monthly" | "6months" | "yearly";
+
 export interface TrendPeriod {
   month: number;
   year: number;
@@ -14,6 +16,29 @@ export interface TrendPeriod {
   isActive: boolean;
   income: number;
   expense: number;
+  // extended for flexible granularities
+  key?: string;
+  startKey?: string;
+  endKey?: string;
+}
+
+export function getExpenseIncomeStatus(income: number, expense: number): { label: string; tone: "surplus" | "balanced" | "deficit"; description: string } {
+  const inc = Number(income || 0);
+  const exp = Number(expense || 0);
+  if (inc === 0 && exp === 0) return { label: "Belum Ada Aktivitas", tone: "balanced", description: "Belum ada pencatatan pada periode ini" };
+  if (inc === 0 && exp > 0) return { label: "Defisit Penuh", tone: "deficit", description: "Tidak ada pemasukan, hanya pengeluaran" };
+  if (exp === 0 && inc > 0) return { label: "Surplus Maksimal", tone: "surplus", description: "Tidak ada pengeluaran, pemasukan utuh" };
+  const diff = Math.abs(inc - exp);
+  const max = Math.max(inc, exp);
+  const ratio = diff / max;
+  if (ratio < 0.1) return { label: "Seimbang", tone: "balanced", description: "Pemasukan dan pengeluaran relatif seimbang" };
+  if (exp > inc) {
+    if (exp > inc * 1.5) return { label: "Defisit Signifikan", tone: "deficit", description: "Pengeluaran jauh melampaui pemasukan" };
+    return { label: "Defisit", tone: "deficit", description: "Pengeluaran melebihi pemasukan" };
+  }
+  // inc > exp
+  if (exp < inc * 0.5) return { label: "Surplus Signifikan", tone: "surplus", description: "Pemasukan jauh melampaui pengeluaran" };
+  return { label: "Surplus", tone: "surplus", description: "Pemasukan melebihi pengeluaran" };
 }
 
 function trimDecimal(value: number) {
@@ -79,30 +104,44 @@ export function DonutChart({ rows, total }: DonutChartProps) {
 }
 
 export function TrendBars({ periods }: { periods: TrendPeriod[] }) {
-  const maxValue = Math.max(1, ...periods.map((period) => Math.max(period.income, period.expense)));
+  const maxValue = Math.max(1, ...periods.map((period) => Math.max(period.income, period.expense, Math.abs(period.income - period.expense))));
+  const cols = Math.min(6, periods.length) === periods.length ? periods.length : periods.length;
+  const gridCols = periods.length <= 6 ? `grid-cols-${periods.length}` : "grid-cols-6";
+  // dynamic grid: use inline style for >6
+  const gridStyle = periods.length > 6 ? { gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))` } : undefined;
 
   return (
     <div className="grid gap-3">
-      <div className="flex gap-3.5 text-[11px] font-extrabold text-muted-foreground">
+      <div className="flex flex-wrap gap-3.5 text-[11px] font-extrabold text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block size-2.5 rounded-[3px] bg-[linear-gradient(180deg,var(--green),var(--teal))]" /> Pemasukan
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block size-2.5 rounded-[3px] bg-[linear-gradient(180deg,var(--rose-strong),var(--red))]" /> Pengeluaran
         </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block size-2.5 rounded-[3px] bg-[linear-gradient(180deg,var(--amber),var(--orange))]" /> Selisih
+        </span>
       </div>
 
-      <div className="grid grid-cols-6 items-end gap-2">
+      <div className={`grid items-end gap-2 ${periods.length <= 6 ? gridCols : ""}`} style={gridStyle}>
         {periods.map((period) => {
           const incomeHeight = period.income > 0 ? Math.max(6, Math.round((period.income / maxValue) * 100)) : 2;
           const expenseHeight = period.expense > 0 ? Math.max(6, Math.round((period.expense / maxValue) * 100)) : 2;
+          const status = getExpenseIncomeStatus(period.income, period.expense);
+          const net = period.income - period.expense;
+          const netColor = status.tone === "surplus" ? "bg-[linear-gradient(180deg,var(--teal),var(--green))]" : status.tone === "deficit" ? "bg-[linear-gradient(180deg,var(--red),var(--rose-strong))]" : "bg-[linear-gradient(180deg,var(--amber),var(--orange))]";
 
           return (
             <div
-              key={`${period.month}-${period.year}`}
-              className="grid min-w-0 justify-items-center gap-1.5"
-              title={`${period.fullLabel}: masuk ${formatCompact(period.income)} / keluar ${formatCompact(period.expense)}`}
+              key={period.key || `${period.month}-${period.year}-${period.label}`}
+              className="grid min-w-0 justify-items-center gap-1"
+              title={`${period.fullLabel}: masuk ${formatCompact(period.income)} / keluar ${formatCompact(period.expense)} / ${status.label} (${status.description})`}
             >
+              <div className="grid w-full justify-items-center gap-0.5">
+                <span className={`text-[9px] font-black ${status.tone === "surplus" ? "text-green" : status.tone === "deficit" ? "text-red" : "text-amber-600"}`}>{net > 0 ? "+" : ""}{formatCompact(net)}</span>
+                <span className={`inline-block h-1 w-6 rounded-full ${netColor}`} style={{ opacity: Math.min(1, Math.abs(net) / maxValue + 0.4) }} />
+              </div>
               <div
                 className={`flex h-[118px] w-full items-end justify-center gap-1 border-b px-0.5 max-[420px]:h-24 ${
                   period.isActive ? "border-rose-strong" : "border-line"
@@ -117,8 +156,11 @@ export function TrendBars({ periods }: { periods: TrendPeriod[] }) {
                   style={{ height: `${expenseHeight}%` }}
                 />
               </div>
-              <small className={`text-[10.5px] font-black ${period.isActive ? "text-rose-dark" : "text-muted-foreground"}`}>
+              <small className={`text-[10px] font-black leading-tight text-center ${period.isActive ? "text-rose-dark" : "text-muted-foreground"}`}>
                 {period.label}
+              </small>
+              <small className={`text-[8px] font-bold px-1 py-0.5 rounded-full border ${status.tone === "surplus" ? "border-green-border bg-green-bg text-green" : status.tone === "deficit" ? "border-red-border bg-red-bg text-red" : "border-amber-500/20 bg-amber-500/10 text-amber-700"}`}>
+                {status.label}
               </small>
             </div>
           );

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Download, Filter, Loader2 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
-import { BalanceLineChart, DonutChart, TrendBars } from "@/components/ReportCharts";
+import { BalanceLineChart, DonutChart, TrendBars, type Granularity, getExpenseIncomeStatus } from "@/components/ReportCharts";
 import ReportFilterSheet from "@/components/ReportFilterSheet";
 import { dummyAccounts, dummyBudgets, dummyTransactions } from "@/mocks/reportDummy";
 import { DONUT_PALETTE } from "@/utils/chartPalette";
@@ -116,6 +116,7 @@ export default function Reports() {
   const [year, setYear] = useState(Number(currentCycle.year));
   const [accountId, setAccountId] = useState("all");
   const [budgetId, setBudgetId] = useState("all");
+  const [granularity, setGranularity] = useState<Granularity>("6months");
 
   const selectedCycle = useMemo(() => getBudgetCycleRange(Number(month), Number(year)), [month, year]);
   const accountById = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
@@ -188,32 +189,156 @@ export default function Reports() {
 
   const donutTotal = useMemo(() => donutRows.reduce((total, row) => total + row.value, 0), [donutRows]);
 
+  // Granularity-aware trend (seluruh keluarga, relatif 0)
   const trendPeriods = useMemo(() => {
-    const periods: { month: number; year: number }[] = [];
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const date = new Date(Number(year), Number(month) - 1 - offset, 1);
-      periods.push({ month: date.getMonth() + 1, year: date.getFullYear() });
+    const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const isInRange = (txDate: string, start: Date, end: Date) => {
+      const k = toKey(new Date(txDate));
+      return k >= toKey(start) && k <= toKey(end);
+    };
+
+    // 6months: 6 siklus gajian (25-24) — tetap relatif 0, seluruh keluarga
+    if (granularity === "6months") {
+      const periods: { month: number; year: number }[] = [];
+      for (let offset = 5; offset >= 0; offset -= 1) {
+        const date = new Date(Number(year), Number(month) - 1 - offset, 1);
+        periods.push({ month: date.getMonth() + 1, year: date.getFullYear() });
+      }
+      return periods.map((period) => {
+        const cycle = getBudgetCycleRange(period.month, period.year);
+        const periodTransactions = transactions.filter((transaction) => isDateInBudgetCycle(getTransactionDate(transaction), cycle));
+        return {
+          ...period,
+          key: `${period.year}-${period.month}`,
+          label: MONTHS[period.month - 1].label.slice(0, 3),
+          fullLabel: `${MONTHS[period.month - 1].label} ${period.year}`,
+          isActive: period.month === Number(month) && period.year === Number(year),
+          income: amountByType(periodTransactions, "income"),
+          expense: amountByType(periodTransactions, "expense"),
+        };
+      });
     }
 
-    return periods.map((period) => {
-      const cycle = getBudgetCycleRange(period.month, period.year);
-      const periodTransactions = transactions.filter((transaction) => {
-        if (!isDateInBudgetCycle(getTransactionDate(transaction), cycle)) return false;
-        if (accountId !== "all" && (transaction.accountId || transaction.account_id) !== accountId) return false;
-        if (budgetId !== "all" && (transaction.budgetId || transaction.budget_id) !== budgetId) return false;
-        return true;
+    if (granularity === "daily") {
+      // 14 hari terakhir, harian
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
+      for (let offset = 13; offset >= 0; offset -= 1) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - offset);
+        const label = d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+        const fullLabel = d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+        periods.push({ start: new Date(d), end: new Date(d), label, fullLabel, key: toKey(d) });
+      }
+      return periods.map((p, idx) => {
+        const pts = transactions.filter((t) => {
+          const kd = toKey(new Date(getTransactionDate(t)));
+          return kd === p.key;
+        });
+        return {
+          month: p.start.getMonth() + 1,
+          year: p.start.getFullYear(),
+          label: p.label,
+          fullLabel: p.fullLabel,
+          key: p.key,
+          startKey: p.key,
+          endKey: p.key,
+          isActive: idx === periods.length - 1,
+          income: amountByType(pts, "income"),
+          expense: amountByType(pts, "expense"),
+        };
       });
+    }
 
-      return {
-        ...period,
-        label: MONTHS[period.month - 1].label.slice(0, 3),
-        fullLabel: `${MONTHS[period.month - 1].label} ${period.year}`,
-        isActive: period.month === Number(month) && period.year === Number(year),
-        income: amountByType(periodTransactions, "income"),
-        expense: amountByType(periodTransactions, "expense"),
-      };
-    });
-  }, [accountId, budgetId, month, transactions, year]);
+    if (granularity === "weekly") {
+      // 8 minggu terakhir, mingguan (Senin-Minggu)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dayOfWeek = (today.getDay() + 6) % 7; // Senin=0
+      const mondayThisWeek = new Date(today);
+      mondayThisWeek.setDate(today.getDate() - dayOfWeek);
+      const periods: { start: Date; end: Date; label: string; fullLabel: string; key: string }[] = [];
+      for (let offset = 7; offset >= 0; offset -= 1) {
+        const start = new Date(mondayThisWeek);
+        start.setDate(mondayThisWeek.getDate() - offset * 7);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        const label = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}`;
+        const fullLabel = `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })} - ${end.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}`;
+        periods.push({ start, end, label, fullLabel, key: `${toKey(start)}_${toKey(end)}` });
+      }
+      return periods.map((p, idx) => {
+        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), p.start, p.end));
+        return {
+          month: p.start.getMonth() + 1,
+          year: p.start.getFullYear(),
+          label: p.label,
+          fullLabel: p.fullLabel,
+          key: p.key,
+          startKey: toKey(p.start),
+          endKey: toKey(p.end),
+          isActive: idx === periods.length - 1,
+          income: amountByType(pts, "income"),
+          expense: amountByType(pts, "expense"),
+        };
+      });
+    }
+
+    if (granularity === "monthly") {
+      // 6 bulan kalender terakhir
+      const periods: { month: number; year: number }[] = [];
+      const base = new Date(Number(year), Number(month) - 1, 1);
+      for (let offset = 5; offset >= 0; offset -= 1) {
+        const d = new Date(base);
+        d.setMonth(base.getMonth() - offset);
+        periods.push({ month: d.getMonth() + 1, year: d.getFullYear() });
+      }
+      return periods.map((period) => {
+        const start = new Date(period.year, period.month - 1, 1);
+        const end = new Date(period.year, period.month, 0);
+        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), start, end));
+        return {
+          ...period,
+          key: `${period.year}-${period.month}`,
+          label: MONTHS[period.month - 1].label.slice(0, 3),
+          fullLabel: `${MONTHS[period.month - 1].label} ${period.year}`,
+          isActive: period.month === Number(month) && period.year === Number(year),
+          income: amountByType(pts, "income"),
+          expense: amountByType(pts, "expense"),
+        };
+      });
+    }
+
+    if (granularity === "yearly") {
+      // 5 tahun terakhir
+      const currentYear = new Date().getFullYear();
+      const periods: { year: number }[] = [];
+      for (let offset = 4; offset >= 0; offset -= 1) {
+        periods.push({ year: currentYear - offset });
+      }
+      return periods.map((period) => {
+        const start = new Date(period.year, 0, 1);
+        const end = new Date(period.year, 11, 31);
+        const pts = transactions.filter((t) => isInRange(getTransactionDate(t), start, end));
+        return {
+          month: 1,
+          year: period.year,
+          label: String(period.year),
+          fullLabel: String(period.year),
+          key: String(period.year),
+          startKey: toKey(start),
+          endKey: toKey(end),
+          isActive: period.year === currentYear,
+          income: amountByType(pts, "income"),
+          expense: amountByType(pts, "expense"),
+        };
+      });
+    }
+
+    // fallback 6months
+    return [];
+  }, [granularity, month, transactions, year]);
 
   const balancePoints = useMemo(() => {
     let running = 0;
@@ -408,22 +533,84 @@ export default function Reports() {
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
-        <div className="mb-4">
-          <h2 className="font-display text-lg tracking-tight text-ink">Tren arus kas</h2>
-          <p className="mt-1 text-xs font-semibold text-muted-foreground">Perbandingan pemasukan dan pengeluaran 6 periode terakhir.</p>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg tracking-tight text-ink">Tren Arus Kas</h2>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">
+              Perbandingan pemasukan & pengeluaran — seluruh keluarga • Realtime •{" "}
+              {granularity === "daily"
+                ? "Harian (14 hari)"
+                : granularity === "weekly"
+                  ? "Mingguan (8 minggu)"
+                  : granularity === "monthly"
+                    ? "Bulanan (6 bulan kalender)"
+                    : granularity === "6months"
+                      ? "6 Siklus Gajian (25–24)"
+                      : "Tahunan (5 tahun)"}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full border border-green-border bg-green-bg px-2.5 py-1 text-[10px] font-black text-green">Live</span>
         </div>
+
+        {/* Granularity switch */}
+        <div className="mb-3 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-soft p-1">
+          {(
+            [
+              { key: "daily", label: "Harian" },
+              { key: "weekly", label: "Mingguan" },
+              { key: "monthly", label: "Bulanan" },
+              { key: "6months", label: "6 Bulan" },
+              { key: "yearly", label: "Tahunan" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setGranularity(opt.key)}
+              className={cn(
+                "flex-1 min-w-[64px] rounded-xl px-3 py-2 text-[11px] font-black transition",
+                granularity === opt.key ? "bg-panel-strong text-ink shadow-soft border border-line-strong" : "text-muted-foreground hover:text-ink"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {(() => {
+          const totalIncome = trendPeriods.reduce((s, p) => s + p.income, 0);
+          const totalExpense = trendPeriods.reduce((s, p) => s + p.expense, 0);
+          const status = getExpenseIncomeStatus(totalIncome, totalExpense);
+          return (
+            <div className={cn("mb-3 rounded-2xl border p-3", status.tone === "surplus" ? "border-green-border bg-green-bg" : status.tone === "deficit" ? "border-red-border bg-red-bg" : "border-amber-500/20 bg-amber-500/10")}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className={cn("text-xs font-black", status.tone === "surplus" ? "text-green" : status.tone === "deficit" ? "text-red" : "text-amber-700")}>{status.label}</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">{status.description} • Selisih {formatCurrency(Math.abs(totalIncome - totalExpense))}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] font-bold text-muted-foreground">Total {granularity === "daily" ? "14 hari" : granularity === "weekly" ? "8 minggu" : granularity === "yearly" ? "5 tahun" : "6 periode"}</p>
+                  <p className="text-xs font-black text-ink">Masuk {formatCurrency(totalIncome)} • Keluar {formatCurrency(totalExpense)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <TrendBars periods={trendPeriods} />
+        <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Ketuk label periode untuk detail. Selisih ditampilkan di atas tiap kolom dengan tone profesional.</p>
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg tracking-tight text-ink">Tren saldo (real-time)</h2>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">Garisan saldo kumulatif 6 periode — income minus expense.</p>
+            <h2 className="font-display text-lg tracking-tight text-ink">Tren Saldo (Realtime)</h2>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">Saldo kumulatif relatif dari 0 — {granularity === "daily" ? "harian" : granularity === "weekly" ? "mingguan" : granularity === "monthly" ? "bulanan" : granularity === "6months" ? "6 siklus" : "tahunan"} • Live</p>
           </div>
           <span className="shrink-0 rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-muted-foreground">Live</span>
         </div>
         <BalanceLineChart points={balancePoints} />
+        <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Relatif dari 0 untuk memudahkan komparasi tren; nilai akhir = net kumulatif periode.</p>
       </section>
 
       <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
