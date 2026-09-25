@@ -210,14 +210,63 @@ function formatCurrency(amount: number | string) {
   return `Rp${Number(amount || 0).toLocaleString("id-ID")}`;
 }
 
+function tryPlayNotificationSound() {
+  try {
+    const raw = localStorage.getItem("keuanganku-notif-sound");
+    const enabled = raw === null ? true : raw !== "0" && raw !== "false";
+    if (!enabled) {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try { (navigator as unknown as { vibrate: (p: number[]) => void }).vibrate([90, 40, 90]); } catch { /* noop */ }
+      }
+      return;
+    }
+    // Inline lightweight chime (mirrors @/utils/notificationSound) to avoid circular deps
+    const AudioCtx =
+      (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.72;
+      master.connect(ctx.destination);
+      const tone = (freq: number, offset: number, dur: number, type: OscillatorType, peak: number) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0, now + offset);
+        g.gain.linearRampToValueAtTime(peak, now + offset + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.01, now + offset + dur);
+        o.connect(g);
+        g.connect(master);
+        o.start(now + offset);
+        o.stop(now + offset + dur + 0.05);
+      };
+      tone(880, 0, 0.24, "sine", 0.9);
+      tone(659.25, 0.14, 0.32, "triangle", 0.68);
+      try { if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate([90, 40, 90]); } catch { /* noop */ }
+      window.setTimeout(() => { try { ctx.close().catch(() => {}); } catch { /* noop */ } }, 1100);
+    } else if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try { navigator.vibrate([90, 40, 90]); } catch { /* noop */ }
+    }
+  } catch {
+    // ignore sound failures entirely
+  }
+}
+
 function showBrowserNotification(title: string, message?: string) {
+  // Always attempt sound/vibrate even if Notification blocked, to satisfy "test with sound" expectation
+  tryPlayNotificationSound();
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (window.Notification.permission !== "granted") return;
   try {
     new window.Notification(title, {
       body: message || "Ada aktivitas baru di KeuanganKu.",
-      icon: "/vite.svg",
-      badge: "/vite.svg",
+      icon: "/pwa-192x192.png",
+      badge: "/pwa-192x192.png",
+      tag: "keuanganku-activity",
     });
   } catch {
     // Browser notification is optional. Ignore failures silently.
@@ -300,7 +349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
             supabase
               .from("accounts")
-              .select("id, family_id, name, type, initial_balance, is_active, created_at, updated_at")
+              .select("id, family_id, name, type, initial_balance, is_active, created_by, created_at, updated_at")
               .eq("family_id", household.id)
               .order("created_at", { ascending: true }),
 
@@ -831,7 +880,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     assertOwnerOrAdmin(currentMember);
     if (!identifier?.trim()) throw new Error("Email atau username anggota wajib diisi.");
 
-    const effectiveRole = currentMember?.role === "admin" ? "member" : role;
+    const effectiveRole = role || "member";
     if (!["admin", "member"].includes(effectiveRole)) {
       throw new Error("Role anggota hanya boleh admin atau member.");
     }
@@ -863,11 +912,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (targetMember.userId === state.user?.id) throw new Error("Anda tidak bisa mengubah role diri sendiri.");
     if (targetMember.role === "owner") throw new Error("Role owner tidak bisa diubah dari menu ini.");
 
-    if (currentMember?.role === "admin") {
-      if (targetMember.role !== "member") throw new Error("Admin hanya bisa mengelola anggota dengan role member.");
-      if (role !== "member") throw new Error("Admin tidak bisa mengangkat anggota menjadi admin.");
-    }
-
     const { error } = await supabase.rpc("update_family_member_role", {
       p_member_id: memberId,
       p_role: role,
@@ -886,9 +930,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!targetMember) throw new Error("Anggota tidak ditemukan.");
     if (targetMember.userId === state.user?.id) throw new Error("Anda tidak bisa menghapus diri sendiri dari keluarga.");
     if (targetMember.role === "owner") throw new Error("Owner tidak bisa dihapus dari menu ini.");
-    if (currentMember?.role === "admin" && targetMember.role !== "member") {
-      throw new Error("Admin hanya bisa menghapus anggota dengan role member.");
-    }
 
     const { error } = await supabase.rpc("remove_family_member", { p_member_id: memberId });
     if (error) throw error;
@@ -907,6 +948,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       type: payload.type || "cash",
       initial_balance: Number(payload.initialBalance || 0),
       is_active: true,
+      created_by: state.user!.id,
     });
     if (error) throw error;
 

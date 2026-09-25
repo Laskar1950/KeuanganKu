@@ -49,6 +49,12 @@ export default defineConfig(({ mode }) => {
           scope: '/',
           start_url: '/',
           categories: ['finance', 'productivity'],
+          handle_links: 'preferred',
+          share_target: {
+            action: '/',
+            method: 'GET',
+            params: { title: 'title', text: 'text', url: 'url' },
+          },
           icons: [
             {
               src: '/pwa-192x192.png',

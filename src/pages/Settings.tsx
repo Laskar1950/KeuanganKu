@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type FormEvent, type ReactNode } from "react";
 import {
+  Bell,
+  BellOff,
+  BellRing,
   Camera,
+  Check,
   ChevronLeft,
   ChevronRight,
   Copy,
+  Download,
+  Info,
   KeyRound,
   LogOut,
   Moon,
@@ -12,6 +18,7 @@ import {
   PiggyBank,
   Save,
   ShieldCheck,
+  Smartphone,
   Sun,
   Tags,
   Trash2,
@@ -19,6 +26,9 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
+  Vibrate,
+  Volume2,
+  VolumeX,
   Wallet,
   X,
 } from "lucide-react";
@@ -28,6 +38,15 @@ import { cn } from "@/lib/utils";
 import { formatRupiah, sanitizeNumericInput } from "@/utils/format";
 import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
 import type { Account, Category, FamilyMember, SavingGoal } from "@/types";
+import { usePWAInstall } from "@/utils/usePWAInstall";
+import {
+  getNotificationPermission,
+  isSoundEnabled,
+  playNotificationSound,
+  playNotificationSoundIfEnabled,
+  setSoundEnabled,
+  triggerTestNotification,
+} from "@/utils/notificationSound";
 
 const roleLabel: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 const accountTypeLabel: Record<string, string> = {
@@ -49,11 +68,11 @@ const roleAccessRows = [
   { label: "Kelola alokasi", owner: "Ya", admin: "Ya", member: "Tidak" },
   { label: "Kelola kategori", owner: "Ya", admin: "Ya", member: "Tidak" },
   { label: "Kelola target tabungan", owner: "Ya", admin: "Ya", member: "Tidak" },
-  { label: "Tambah anggota", owner: "Admin/Member", admin: "Member saja", member: "Tidak" },
-  { label: "Ubah role anggota", owner: "Ya", admin: "Tidak", member: "Tidak" },
-  { label: "Hapus anggota", owner: "Admin/Member", admin: "Member saja", member: "Tidak" },
+  { label: "Tambah anggota", owner: "Ya", admin: "Ya", member: "Tidak" },
+  { label: "Ubah role anggota", owner: "Ya", admin: "Ya", member: "Tidak" },
+  { label: "Hapus anggota", owner: "Ya", admin: "Ya", member: "Tidak" },
   { label: "Lihat laporan", owner: "Ya", admin: "Ya", member: "Ya" },
-  { label: "Ubah data keluarga", owner: "Ya", admin: "Tidak", member: "Tidak" },
+  { label: "Ubah data keluarga", owner: "Ya", admin: "Ya", member: "Tidak" },
 ];
 
 const fieldClassName =
@@ -238,6 +257,160 @@ export default function Settings({ view = "menu" }: SettingsProps) {
   const familyIncomeCategories = incomeCategories.filter((category) => category.familyId);
   const defaultIncomeCategories = incomeCategories.filter((category) => !category.familyId);
 
+  // PWA & Notifications state
+  const pwa = usePWAInstall();
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(() => getNotificationPermission());
+  const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => isSoundEnabled());
+  const [installingPWA, setInstallingPWA] = useState(false);
+  const [testingNotif, setTestingNotif] = useState(false);
+  const [showIOSHelp, setShowIOSHelp] = useState(false);
+
+  // Keep permission in sync when tab refocuses or permission changes externally
+  useEffect(() => {
+    const sync = () => setNotifPermission(getNotificationPermission());
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setSoundEnabledState(next);
+    // immediate preview when enabling
+    if (next) playNotificationSound(0.72);
+    notify(next ? "Suara notifikasi diaktifkan 🔊" : "Suara notifikasi dimatikan 🔇");
+  };
+
+  const handleEnableNotification = async () => {
+    const perm = getNotificationPermission();
+    if (perm === "unsupported") {
+      notify("Browser ini belum mendukung notifikasi.");
+      return;
+    }
+    if (perm === "granted") {
+      notify("Notifikasi sudah aktif ✅");
+      return;
+    }
+    if (perm === "denied") {
+      notify("Izin notifikasi diblokir. Buka pengaturan browser untuk mengaktifkan kembali.");
+      return;
+    }
+    try {
+      const result = await window.Notification.requestPermission();
+      setNotifPermission(result as NotificationPermission);
+      if (result === "granted") {
+        if (soundEnabled) playNotificationSound(0.72);
+        // also show a friendly confirmation via system notification if possible
+        try {
+          if ("serviceWorker" in navigator) {
+            const reg = await navigator.serviceWorker.ready.catch(() => null);
+            if (reg && "showNotification" in reg) {
+              await (reg as unknown as { showNotification: (t: string, o: NotificationOptions) => Promise<void> }).showNotification("KeuanganKu", {
+                body: "Notifikasi berhasil diaktifkan — kamu akan dapat info transaksi & anggaran.",
+                icon: "/pwa-192x192.png",
+                badge: "/pwa-192x192.png",
+                tag: "keuanganku-enabled",
+              } as NotificationOptions);
+            } else {
+              new window.Notification("KeuanganKu", {
+                body: "Notifikasi berhasil diaktifkan — kamu akan dapat info transaksi & anggaran.",
+                icon: "/pwa-192x192.png",
+              });
+            }
+          }
+        } catch {
+          // ignore show errors
+        }
+        notify("Notifikasi browser diaktifkan ✅ + suara siap 🔊");
+      } else if (result === "denied") {
+        notify("Izin notifikasi ditolak. Ubah di pengaturan browser jika ingin mengaktifkan.");
+      } else {
+        notify("Izin notifikasi belum diberikan.");
+      }
+    } catch {
+      notify("Gagal meminta izin notifikasi. Coba lagi.");
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (testingNotif) return;
+    setTestingNotif(true);
+    try {
+      // Always give haptic + sound feedback even if notification blocked
+      if (soundEnabled) {
+        playNotificationSoundIfEnabled();
+      } else {
+        // still vibrate for feedback
+        try { navigator.vibrate?.([90, 40, 90]); } catch { /* noop */ }
+      }
+
+      const perm = getNotificationPermission();
+      if (perm === "unsupported") {
+        notify("🔊 Tes suara berhasil! (browser tidak dukung notifikasi sistem)");
+        // extra sound demo
+        await new Promise((r) => setTimeout(r, 120));
+        playNotificationSound(0.72);
+        return;
+      }
+      if (perm !== "granted") {
+        // Attempt to request, but also fallback to toast + sound as test
+        notify("🔊 Tes suara & getar berhasil! Aktifkan notifikasi untuk tampil di sistem.");
+        // play again to emphasize
+        window.setTimeout(() => playNotificationSoundIfEnabled(), 250);
+        return;
+      }
+
+      const res = await triggerTestNotification({
+        title: "KeuanganKu — Tes Notifikasi 🔔",
+        body: `Halo ${user?.name || "Kamu"}! Notifikasi & suara aktif ✅ — ${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
+        withSound: soundEnabled,
+      });
+      if (res.shown) {
+        notify("✅ Test notifikasi terkirim — cek bilah notifikasi + dengar suaranya 🔊");
+      } else {
+        // still consider test successful locally
+        notify("🔊 Tes notifikasi lokal berhasil! (suara & getar aktif)");
+      }
+    } finally {
+      window.setTimeout(() => setTestingNotif(false), 800);
+    }
+  };
+
+  const handleInstallPWA = async () => {
+    if (pwa.isInstalled) {
+      notify("Aplikasi sudah terinstall ✅ Buka dari layar utama / Apps.");
+      return;
+    }
+    if (pwa.isIOS && !pwa.canInstall) {
+      setShowIOSHelp((v) => !v);
+      if (!showIOSHelp) notify("Ikuti petunjuk install di iPhone/iPad di bawah 👇");
+      return;
+    }
+    if (!pwa.canInstall) {
+      notify("Belum bisa di-install otomatis. Gunakan Chrome/Edge > Menu ⋮ > Install / Add to Home Screen.");
+      return;
+    }
+    setInstallingPWA(true);
+    try {
+      const outcome = await pwa.promptInstall();
+      if (outcome === "accepted") {
+        notify("Memasang aplikasi... Cek layar utama / app drawer 📲");
+      } else if (outcome === "dismissed") {
+        notify("Pemasangan dibatalkan. Kamu bisa coba lagi kapan saja.");
+      } else if (outcome === "already-installed") {
+        notify("Aplikasi sudah terinstall ✅");
+      } else {
+        notify("Belum tersedia prompt install. Coba via menu browser > Install App.");
+      }
+    } finally {
+      setInstallingPWA(false);
+    }
+  };
+
   useEffect(() => {
     setProfileForm({ name: user?.name || "", avatarUrl: user?.avatarUrl || "" });
   }, [user?.name, user?.avatarUrl]);
@@ -405,12 +578,11 @@ export default function Settings({ view = "menu" }: SettingsProps) {
     event.preventDefault();
     try {
       if (!canManageMembers) throw new Error("Hanya owner atau admin yang bisa menambahkan anggota.");
-      if (isAdmin && memberForm.role !== "member") throw new Error("Admin hanya bisa menambahkan anggota sebagai member.");
       if (!memberForm.identifier.trim()) throw new Error("Email atau username anggota wajib diisi.");
       setAddingMember(true);
       const { error } = await supabase.rpc("add_family_member_by_identifier", {
         p_identifier: memberForm.identifier.trim(),
-        p_role: isAdmin ? "member" : memberForm.role,
+        p_role: memberForm.role,
       });
       if (error) throw error;
       setMemberForm(emptyMemberForm);
@@ -427,10 +599,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
     try {
       if (!canManageMembers) throw new Error("Hanya owner atau admin yang bisa mengubah role anggota.");
       if (member.userId === user?.id) throw new Error("Anda tidak bisa mengubah role akun sendiri.");
-      if (isAdmin && member.role !== "member") throw new Error("Admin tidak bisa mengubah role owner atau admin lain.");
       const nextRole = roleDrafts[member.id] || member.role;
       if (!nextRole || nextRole === "owner") throw new Error("Role tidak valid.");
-      if (isAdmin && nextRole !== "member") throw new Error("Admin tidak bisa mengangkat anggota menjadi admin.");
       if (nextRole === member.role) {
         notify("Role anggota tidak berubah.");
         return;
@@ -454,7 +624,6 @@ export default function Settings({ view = "menu" }: SettingsProps) {
     try {
       if (!canManageMembers) throw new Error("Hanya owner atau admin yang bisa menghapus anggota.");
       if (member.userId === user?.id) throw new Error("Anda tidak bisa menghapus akun sendiri.");
-      if (isAdmin && member.role !== "member") throw new Error("Admin tidak bisa menghapus owner atau admin lain.");
       const memberName = member.profile?.name || member.profile?.email || "anggota ini";
       if (!window.confirm(`Hapus ${memberName} dari keluarga?`)) return;
       setProcessingMemberId(member.id);
@@ -572,6 +741,252 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 </button>
               );
             })}
+          </div>
+        </section>
+      </section>
+
+      <section className="grid gap-2.5">
+        <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Aplikasi</p>
+        <section className={cardClassName}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="grid size-11 place-items-center rounded-[17px] border border-line bg-rose-bg text-rose-dark shrink-0">
+                <Smartphone size={18} />
+              </span>
+              <div className="min-w-0">
+                <strong className="block text-[13.5px] font-black text-ink truncate">Install Aplikasi (PWA)</strong>
+                <small className="block text-[11px] font-semibold text-muted-foreground leading-tight">
+                  {pwa.isInstalled ? "Sudah terpasang di perangkat" : pwa.canInstall ? "Pasang biar buka lebih cepat" : pwa.isIOS ? "iPhone/iPad — install manual" : "Akses cepat dari layar utama"}
+                </small>
+              </div>
+            </div>
+            {pwa.isInstalled ? (
+              <span className="inline-flex items-center gap-1 shrink-0 rounded-full border border-green-border bg-green-bg px-2.5 py-1 text-[10px] font-black text-green">
+                <Check size={12} /> Terpasang
+              </span>
+            ) : pwa.canInstall ? (
+              <span className="inline-flex shrink-0 rounded-full border border-blue-border bg-blue-bg px-2.5 py-1 text-[10px] font-black text-blue">Siap install</span>
+            ) : (
+              <span className="inline-flex shrink-0 rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-muted-foreground">
+                {pwa.isIOS ? "iOS" : "Browser"}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-2.5">
+            {pwa.isInstalled ? (
+              <div className="rounded-2xl border border-green-border bg-green-bg p-3">
+                <p className="flex items-center gap-1.5 text-xs font-black text-green">
+                  <Check size={14} /> KeuanganKu sudah terinstall
+                </p>
+                <p className="mt-1 text-xs leading-relaxed font-semibold text-green/80">
+                  Buka dari layar utama / app drawer. Kamu juga akan dapat update otomatis saat ada versi baru.
+                </p>
+              </div>
+            ) : pwa.canInstall ? (
+              <>
+                <p className="text-xs leading-relaxed font-semibold text-muted-foreground">
+                  Pasang sebagai aplikasi agar bisa dibuka fullscreen, offline-ready, dan dapat notifikasi lebih andal.
+                </p>
+                <button type="button" onClick={handleInstallPWA} disabled={installingPWA} className={primaryButtonClassName}>
+                  <Download size={16} /> {installingPWA ? "Memasang..." : "Download / Install Aplikasi"}
+                </button>
+                <p className="text-[11px] font-semibold text-muted-foreground text-center">
+                  Akan muncul dialog install dari browser — ketuk <b>Install</b>.
+                </p>
+              </>
+            ) : pwa.isIOS ? (
+              <>
+                <div className="rounded-2xl border border-blue-border bg-blue-bg p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-black text-blue">
+                    <Info size={14} /> Cara install di iPhone / iPad
+                  </p>
+                  <ol className="mt-2 grid gap-1.5 text-xs font-semibold text-blue/90 list-decimal list-inside">
+                    <li>
+                      Ketuk tombol <b>Bagikan</b> <span className="inline-flex align-middle mx-0.5 rounded border border-line bg-panel px-1 py-0.5 text-[10px]">⎙</span> di Safari (bawah layar)
+                    </li>
+                    <li>
+                      Pilih <b>Tambahkan ke Layar Utama</b> / <b>Add to Home Screen</b>
+                    </li>
+                    <li>Ketuk Tambahkan — ikon KeuanganKu akan muncul di Home Screen</li>
+                  </ol>
+                </div>
+                <button type="button" onClick={handleInstallPWA} className={secondaryButtonClassName}>
+                  <Smartphone size={16} /> {showIOSHelp ? "Sembunyikan Petunjuk" : "Lihat Petunjuk Lengkap"}
+                </button>
+                {showIOSHelp && (
+                  <div className="rounded-2xl border border-line bg-soft p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
+                    <p className="font-black text-ink">Tips iOS:</p>
+                    <p className="mt-1">Pastikan buka KeuanganKu di Safari (bukan Chrome iOS yang dibungkus). Setelah menambah ke Home Screen, buka dari ikon baru untuk mode aplikasi fullscreen.</p>
+                    <p className="mt-2 text-[11px]">Alternatif: di Chrome iOS, menu ⋮ → <b>Tambahkan ke Layar Utama</b>.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs leading-relaxed font-semibold text-muted-foreground">Browser ini belum memicu prompt install otomatis.</p>
+                <div className="rounded-2xl border border-line bg-soft p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
+                  <p className="font-black text-ink flex items-center gap-1.5">
+                    <Download size={14} /> Cara lain:
+                  </p>
+                  <ul className="mt-1.5 grid gap-1 list-disc list-inside">
+                    <li>
+                      <b>Chrome / Edge (Android & Desktop):</b> Menu ⋮ → <b>Install app</b> / <b>Save & Share</b> → <b>Install</b> / <b>Create shortcut</b> → <b>Open as window</b>
+                    </li>
+                    <li>
+                      <b>Jika menu tidak ada:</b> coba buka di Chrome terbaru, pastikan koneksi online, lalu refresh.
+                    </li>
+                  </ul>
+                </div>
+                <button type="button" onClick={handleInstallPWA} className={secondaryButtonClassName}>
+                  <Download size={16} /> Coba Install
+                </button>
+              </>
+            )}
+          </div>
+
+          <p className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+            <Info size={12} /> PWA: tetap aman, tidak perlu Play Store, update otomatis.
+          </p>
+        </section>
+      </section>
+
+      <section className="grid gap-2.5">
+        <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Notifikasi</p>
+        <section className={cardClassName}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="grid size-11 place-items-center rounded-[17px] border border-line bg-rose-bg text-rose-dark shrink-0">
+                {notifPermission === "granted" ? <BellRing size={18} /> : notifPermission === "denied" ? <BellOff size={18} /> : <Bell size={18} />}
+              </span>
+              <div className="min-w-0">
+                <strong className="block text-[13.5px] font-black text-ink">Notifikasi & Suara</strong>
+                <small className="block text-[11px] font-semibold text-muted-foreground leading-tight">
+                  {notifPermission === "granted"
+                    ? "Aktif — kamu dapat info realtime"
+                    : notifPermission === "denied"
+                      ? "Diblokir — aktifkan di browser"
+                      : notifPermission === "unsupported"
+                        ? "Browser tidak dukung"
+                        : "Belum aktif — ketuk Aktifkan"}
+                </small>
+              </div>
+            </div>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black",
+                notifPermission === "granted"
+                  ? "border-green-border bg-green-bg text-green"
+                  : notifPermission === "denied"
+                    ? "border-red-border bg-red-bg text-red"
+                    : "border-line bg-soft text-muted-foreground"
+              )}
+            >
+              {notifPermission === "granted" ? (
+                <>
+                  <Check size={11} /> Aktif
+                </>
+              ) : notifPermission === "denied" ? (
+                "Diblokir"
+              ) : notifPermission === "unsupported" ? (
+                "Tidak didukung"
+              ) : (
+                "Nonaktif"
+              )}
+            </span>
+          </div>
+
+          <div className="mt-3 grid gap-3">
+            {/* Main enable row */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-black text-ink flex items-center gap-1.5">
+                  <Bell size={13} /> Notifikasi Browser
+                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground leading-tight">
+                  {notifPermission === "granted"
+                    ? "Izin diberikan — aktivitas keluarga akan muncul di sistem."
+                    : notifPermission === "denied"
+                      ? "Izin diblokir. Buka Settings → Site → Notifications → Allow."
+                      : "Dapatkan alert transaksi & anggaran langsung."}
+                </p>
+              </div>
+              {notifPermission === "granted" ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-bg px-2.5 py-1.5 text-[11px] font-black text-green border border-green-border shrink-0">
+                  <Check size={12} /> Aktif
+                </span>
+              ) : notifPermission === "unsupported" ? (
+                <span className="rounded-full bg-soft px-2.5 py-1.5 text-[11px] font-black text-muted-foreground border border-line shrink-0">N/A</span>
+              ) : (
+                <button type="button" onClick={handleEnableNotification} className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/40 text-[11px] font-black text-on-accent shadow-accent px-4 py-2 shrink-0 [background-image:var(--gradient-brand)]">
+                  Aktifkan
+                </button>
+              )}
+            </div>
+
+            {/* Sound toggle */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-3">
+              <div className="min-w-0 flex items-center gap-2.5">
+                <span className={cn("grid size-9 place-items-center rounded-xl border text-rose-dark shrink-0", soundEnabled ? "bg-rose-bg border-line" : "bg-soft border-line")}>
+                  {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-ink">Suara Notifikasi</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">{soundEnabled ? "Bunyi chime + getar aktif" : "Senyap — hanya visual"}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={soundEnabled}
+                aria-label="Toggle suara notifikasi"
+                onClick={handleToggleSound}
+                className={cn(
+                  "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-0.5 transition",
+                  soundEnabled ? "border-transparent [background-image:var(--gradient-brand)] shadow-accent" : "border-line bg-soft"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block size-5 rounded-full bg-white shadow transition",
+                    soundEnabled ? "translate-x-5" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Vibration hint + test button */}
+            <div className="rounded-2xl border border-line bg-soft p-3 flex items-start gap-2.5">
+              <span className="grid size-8 place-items-center rounded-xl bg-panel border border-line text-muted-foreground shrink-0 mt-0.5">
+                <Vibrate size={14} />
+              </span>
+              <p className="text-xs leading-relaxed font-semibold text-muted-foreground">
+                Suara menggunakan Web Audio <b>tanpa download file</b> + getar (jika perangkat mendukung). Tetap aman di mode PWA & offline.
+              </p>
+            </div>
+
+            <button type="button" onClick={handleTestNotification} disabled={testingNotif} className={secondaryButtonClassName}>
+              <BellRing size={16} /> {testingNotif ? "Mengirim..." : "Test Notifikasi + Suara"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (soundEnabled) playNotificationSound(0.72);
+                else {
+                  try { navigator.vibrate?.([90, 40, 90]); } catch { /* noop */ }
+                  notify("Getar diuji ✅ (suara sedang dimatikan)");
+                  return;
+                }
+                notify("🔊 Suara diuji — dengar chime barusan?");
+              }}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-panel-strong text-xs font-black text-rose-dark shadow-soft transition hover:bg-rose-bg"
+            >
+              {soundEnabled ? <Volume2 size={15} /> : <Vibrate size={15} />} {soundEnabled ? "Test Suara Saja" : "Test Getar Saja"}
+            </button>
+
+            <p className="text-[11px] font-semibold text-muted-foreground text-center leading-relaxed">
+              Ketuk <b>Test</b> untuk memastikan suara & notifikasi muncul. Jika diblokir, ikuti petunjuk di atas atau cek <b>chrome://settings/content/notifications</b>.
+            </p>
           </div>
         </section>
       </section>
@@ -784,8 +1199,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
             <RolePill role={currentMember?.role} />
           </div>
           <p className="mt-2 text-xs leading-relaxed font-semibold text-muted-foreground">
-            Owner dapat menambahkan anggota sebagai admin atau member. Admin dapat menambahkan anggota sebagai member dan
-            mengelola anggota yang bukan owner/admin.
+            Owner dan Admin memiliki hak sama untuk menambah anggota sebagai admin atau member dan mengelola anggota.
+            Hanya owner yang tidak bisa diubah atau dihapus.
           </p>
           <form className="mt-4 grid gap-3" onSubmit={submitAddMember}>
             <div className="grid gap-2">
@@ -806,7 +1221,7 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 className={cn(fieldClassName, "appearance-none")}
               >
                 <option value="member">Member</option>
-                {isOwner && <option value="admin">Admin</option>}
+                {canManageMembers && <option value="admin">Admin</option>}
               </select>
             </div>
             <button type="submit" disabled={addingMember} className={secondaryButtonClassName}>
@@ -835,8 +1250,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
           {(familyMembers as FamilyMember[]).map((member) => {
             const isSelf = member.userId === user?.id;
             const isLockedOwner = member.role === "owner";
-            const canChangeRole = isOwner && !isSelf && !isLockedOwner;
-            const canRemoveMember = Boolean(canManageMembers && !isSelf && !isLockedOwner && (isOwner || member.role === "member"));
+            const canChangeRole = canManageMembers && !isSelf && !isLockedOwner;
+            const canRemoveMember = Boolean(canManageMembers && !isSelf && !isLockedOwner);
             const isProcessing = processingMemberId === member.id;
 
             return (
@@ -892,9 +1307,6 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                   {canManageMembers && isLockedOwner && !isSelf && (
                     <p className="text-[10px] font-semibold text-muted-foreground">Owner utama</p>
                   )}
-                  {isAdmin && member.role === "admin" && !isSelf && (
-                    <p className="text-[10px] font-semibold text-muted-foreground">Admin lain</p>
-                  )}
                 </div>
               </div>
             );
@@ -916,8 +1328,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
           <RolePill role={currentMember?.role} />
         </div>
         <p className="mt-2 text-xs leading-relaxed font-semibold text-muted-foreground">
-          Hak akses dibuat tetap agar penggunaan aplikasi keluarga tetap sederhana. Owner mengatur role anggota pada menu
-          Anggota Keluarga.
+          Owner dan Admin memiliki hak yang sama. Perbedaannya hanya: Admin tidak bisa membuat keluarga baru. Role Owner tidak
+          bisa diubah/dihapus. Kelola anggota via menu Anggota Keluarga.
         </p>
 
         <div className="mt-3 grid gap-1.5" role="table" aria-label="Hak akses role">
@@ -959,8 +1371,14 @@ export default function Settings({ view = "menu" }: SettingsProps) {
           )}
         </div>
 
+        <p className="text-[11px] leading-relaxed font-semibold text-muted-foreground">
+          Semua dompet tampil di semua anggota. Saat <b>catat transaksi</b>, dropdown dompet & alokasi hanya menampilkan <b>dompet milik Anda</b> (+ dompet bersama legacy) — manager bisa pilih <em>Semua dompet</em>.
+        </p>
         <div className="mt-3 grid gap-2.5">
-          {(accountBalances as Account[]).map((account) => (
+          {(accountBalances as Account[]).map((account) => {
+            const ownerMember = (familyMembers as FamilyMember[]).find((m) => m.userId === (account as Account & { createdBy?: string | null }).createdBy);
+            const isShared = !(account as Account & { createdBy?: string | null }).createdBy;
+            return (
             <div key={account.id} className="rounded-[22px] border border-line bg-panel p-3 shadow-soft">
               <div className="flex items-center gap-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-[17px] border border-line bg-rose-bg text-rose-dark">
@@ -971,6 +1389,19 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                   <p className="text-[11px] font-semibold text-muted-foreground">
                     {accountTypeLabel[account.type] || account.type} • {account.isActive ? "Aktif" : "Nonaktif"}
                   </p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {isShared ? (
+                      <span className="inline-flex items-center rounded-full border border-line bg-soft px-2 py-0.5 text-[10px] font-black text-muted-foreground">Dompet Bersama (legacy)</span>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-semibold text-muted-foreground">Pemilik:</span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-border bg-blue-bg px-2 py-0.5 text-[10px] font-black text-blue">
+                          {ownerMember?.profile?.name || "Pengguna"}
+                        </span>
+                        {ownerMember?.userId === user?.id && <span className="inline-flex rounded-full border border-green-border bg-green-bg px-2 py-0.5 text-[10px] font-black text-green">Anda</span>}
+                      </>
+                    )}
+                  </div>
                 </div>
                 <p className="shrink-0 text-[13px] font-black text-ink">{formatRupiah(account.currentBalance || 0)}</p>
               </div>
@@ -1001,7 +1432,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {canManageWallets ? (

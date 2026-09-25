@@ -62,6 +62,7 @@ const labelClassName = "text-xs font-extrabold tracking-wide text-muted-foregrou
 
 export default function Budgets() {
   const {
+    user,
     budgets,
     transactions,
     accountBalances,
@@ -81,8 +82,11 @@ export default function Budgets() {
   const [deleteTarget, setDeleteTarget] = useState<Budget | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showAllWallets, setShowAllWallets] = useState(false);
 
   const canManageBudget = ["owner", "admin"].includes(currentMember?.role);
+  const isManager = ["owner", "admin"].includes(currentMember?.role || "");
+  const currentUserId = user?.id || "";
   const cycleRange = formatBudgetCycleRange(selectedCycle.month, selectedCycle.year);
   const cycleTransactions = useMemo(
     () => getBudgetCycleTransactions(transactions, selectedCycle.month, selectedCycle.year) as Transaction[],
@@ -98,6 +102,17 @@ export default function Budgets() {
         .sort((a, b) => a.name.localeCompare(b.name, "id")),
     [budgets, selectedCycle.month, selectedCycle.year]
   );
+
+  const budgetWalletOptions = useMemo(() => {
+    const base = (accountBalances as Account[]).filter((a) => a.isActive !== false);
+    return base.filter((acc) => {
+      if ((acc as Account & { createdBy?: string | null }).createdBy == null) return true;
+      if ((acc as Account & { createdBy?: string | null }).createdBy === currentUserId) return true;
+      if (isManager && showAllWallets) return true;
+      if (acc.id === form.accountId) return true;
+      return false;
+    });
+  }, [accountBalances, currentUserId, isManager, showAllWallets, form.accountId]);
 
   const totals = filteredBudgets.reduce(
     (acc, budget) => {
@@ -350,21 +365,39 @@ export default function Budgets() {
                 />
               </div>
               <div className="grid gap-2">
-                <label className={labelClassName}>Sumber dompet</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className={labelClassName}>Sumber dompet</label>
+                  {isManager && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllWallets((v) => !v)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                        showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
+                      )}
+                    >
+                      {showAllWallets ? "Semua" : "Milik saya"}
+                    </button>
+                  )}
+                </div>
                 <select
                   value={form.accountId}
                   onChange={(event) => setField("accountId", event.target.value)}
                   className={cn(fieldClassName, "appearance-none")}
                 >
                   <option value="">Pilih dompet</option>
-                  {(accountBalances as Account[])
-                    .filter((account) => account.isActive !== false)
-                    .map((account) => (
-                      <option value={account.id} key={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
+                  {budgetWalletOptions.map((account) => (
+                    <option value={account.id} key={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
                 </select>
+                {budgetWalletOptions.length === 0 && (
+                  <small className="text-[11px] font-semibold text-muted-foreground">Belum ada dompet milik Anda. Buat di Pengaturan → Dompet.</small>
+                )}
+                {!isManager && budgetWalletOptions.length > 0 && (
+                  <small className="text-[10px] font-semibold text-muted-foreground">Hanya dompet milik Anda</small>
+                )}
               </div>
             </div>
 

@@ -21,6 +21,7 @@ export interface Account {
   currentBalance?: number;
   isActive: boolean;
   familyId?: string;
+  createdBy?: string | null;
 }
 
 export interface Transaction {

@@ -63,6 +63,7 @@ interface AccountRow {
   type: string;
   initial_balance?: number | string;
   is_active?: boolean;
+  created_by?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -163,6 +164,7 @@ export const toAccount = (row: AccountRow): Account => ({
   type: row.type,
   initialBalance: Number(row.initial_balance || 0),
   isActive: row.is_active !== false,
+  createdBy: row.created_by || null,
 });
 
 export const toTransaction = (row: TransactionRow): Transaction => ({

@@ -88,8 +88,8 @@ export const families = pgTable(
     pgPolicy('families_update_owner', {
       for: 'update',
       to: authenticatedRole,
-      using: sql`public.is_family_owner(${table.id})`,
-      withCheck: sql`${table.ownerUserId} = auth.uid()`,
+      using: sql`public.is_family_admin_or_owner(${table.id})`,
+      withCheck: sql`public.is_family_admin_or_owner(${table.id})`,
     }),
   ]
 ).enableRLS();
@@ -131,12 +131,15 @@ export const accounts = pgTable(
     type: accountType('type').notNull().default('cash'),
     initialBalance: numeric('initial_balance', { precision: 14, scale: 2 }).notNull().default(0),
     isActive: boolean('is_active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({ name: 'accounts_family_id_fkey', columns: [table.familyId], foreignColumns: [families.id] }).onDelete('cascade'),
     index('accounts_family_id_idx').on(table.familyId),
+    index('accounts_created_by_idx').on(table.createdBy),
+    index('accounts_family_created_by_idx').on(table.familyId, table.createdBy),
     check('accounts_name_check', sql`length(btrim(${table.name})) > 0`),
     check('accounts_initial_balance_check', sql`${table.initialBalance} >= 0`),
     pgPolicy('accounts_select_member', {

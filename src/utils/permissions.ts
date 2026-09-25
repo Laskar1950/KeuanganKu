@@ -29,11 +29,11 @@ export const ROLE_ACCESS_MATRIX: RoleAccessRow[] = [
   { key: "manageBudgets", label: "Kelola alokasi", owner: true, admin: true, member: false },
   { key: "manageCategories", label: "Kelola kategori", owner: true, admin: true, member: false },
   { key: "manageSavingGoals", label: "Kelola target tabungan", owner: true, admin: true, member: false },
-  { key: "addMembers", label: "Tambah anggota", owner: true, admin: "Member saja", member: false },
-  { key: "changeMemberRoles", label: "Ubah role anggota", owner: true, admin: false, member: false },
-  { key: "removeMembers", label: "Hapus anggota", owner: true, admin: "Member saja", member: false },
+  { key: "addMembers", label: "Tambah anggota", owner: true, admin: true, member: false },
+  { key: "changeMemberRoles", label: "Ubah role anggota", owner: true, admin: true, member: false },
+  { key: "removeMembers", label: "Hapus anggota", owner: true, admin: true, member: false },
   { key: "viewReports", label: "Lihat laporan", owner: true, admin: true, member: true },
-  { key: "manageFamilySettings", label: "Ubah data keluarga", owner: true, admin: false, member: false },
+  { key: "manageFamilySettings", label: "Ubah data keluarga", owner: true, admin: true, member: false },
 ];
 
 type MemberOrRole = FamilyMember | { role?: string | null } | string | null | undefined;
@@ -99,12 +99,12 @@ export function getPermissions(memberOrRole: MemberOrRole): Permissions {
     canManageCategories: isManager,
     canManageSavingGoals: isManager,
     canManageMembers: isManager,
-    canAddAdmin: isOwner,
-    canChangeMemberRoles: isOwner,
-    canRemoveAdmins: isOwner,
+    canAddAdmin: isManager,
+    canChangeMemberRoles: isManager,
+    canRemoveAdmins: isManager,
     canRemoveMembers: isManager,
     canViewReports: true,
-    canManageFamilySettings: isOwner,
+    canManageFamilySettings: isManager,
   };
 }
 

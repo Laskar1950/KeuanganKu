@@ -8,6 +8,7 @@ import { getBudgetUsage } from "@/utils/calculations";
 import { getBudgetCycle, getBudgetCycleTransactions, formatBudgetCycleRange } from "@/utils/budgetCycle";
 import { useDebounce } from "@/utils/useDebounce";
 import { useBodyScrollLock } from "@/utils/useBodyScrollLock";
+import { parseMBankingText, type ParsedMBanking } from "@/utils/mBankParser";
 import type { Account, Budget, Category, Transaction } from "@/types";
 
 interface TransactionForm {
@@ -215,6 +216,7 @@ interface TransactionSheetProps {
 
 export default function TransactionSheet({ open, onClose, editingTransaction = null, onClearEdit }: TransactionSheetProps) {
   const {
+    user,
     categories,
     budgets,
     transactions,
@@ -233,6 +235,10 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const [allocationPickerOpen, setAllocationPickerOpen] = useState(false);
   const [allocationSearch, setAllocationSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showAllWallets, setShowAllWallets] = useState(false);
+  const [showMBImport, setShowMBImport] = useState(false);
+  const [mbText, setMbText] = useState("");
+  const [mbParsed, setMbParsed] = useState<ParsedMBanking | null>(null);
 
   useBodyScrollLock(open);
 
@@ -257,6 +263,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   }, [editingTransaction, open]);
 
   const canAddCategory = ["owner", "admin"].includes(currentMember?.role);
+  const isManager = ["owner", "admin"].includes(currentMember?.role || "");
+  const currentUserId = user?.id || "";
   const incomeCategories = useMemo(
     () => (categories as Category[]).filter((category) => category.type === "income"),
     [categories]
@@ -268,16 +276,40 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     [transactions, cycle.month, cycle.year, editingTransaction?.id]
   );
 
+  // Dompet untuk pemasukan: hanya milik sendiri + legacy shared (createdBy null) — manager bisa toggle lihat semua
+  const incomeWalletOptions = useMemo(() => {
+    const base = (accountBalances as Account[]).filter((acc) => acc.isActive);
+    return base.filter((acc) => {
+      if (acc.createdBy == null) return true; // legacy shared visible to all
+      if (acc.createdBy === currentUserId) return true;
+      if (isManager && showAllWallets) return true;
+      // allow currently selected value to remain visible when editing other's transaction
+      if (acc.id === form.accountId || acc.id === editingTransaction?.accountId) return true;
+      return false;
+    });
+  }, [accountBalances, currentUserId, isManager, showAllWallets, form.accountId, editingTransaction?.accountId]);
+
   const availableBudgets = useMemo(() => {
     if (form.type !== "expense") return [] as Budget[];
-    return (budgets as Budget[])
+    const filtered = (budgets as Budget[])
       .filter((budget) => Number(budget.month) === Number(cycle.month) && Number(budget.year) === Number(cycle.year))
+      .filter((budget) => {
+        const acct = accountBalances.find((item: Account) => item.id === budget.accountId) as Account | undefined;
+        if (!acct) return false;
+        if (acct.createdBy == null) return true; // legacy shared alokasi tampil untuk semua
+        if (acct.createdBy === currentUserId) return true;
+        if (isManager && showAllWallets) return true;
+        // keep selected budget visible when editing
+        if (budget.id === form.budgetId || budget.id === editingTransaction?.budgetId) return true;
+        return false;
+      })
       .sort((a, b) => {
         const accountA = accountBalances.find((item: Account) => item.id === a.accountId)?.name || "";
         const accountB = accountBalances.find((item: Account) => item.id === b.accountId)?.name || "";
         return accountA.localeCompare(accountB, "id") || a.name.localeCompare(b.name, "id");
       });
-  }, [accountBalances, budgets, cycle.month, cycle.year, form.type]);
+    return filtered;
+  }, [accountBalances, budgets, cycle.month, cycle.year, form.type, currentUserId, isManager, showAllWallets, form.budgetId, editingTransaction?.budgetId]);
 
   useEffect(() => {
     if (form.type !== "expense") {
@@ -307,6 +339,60 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     setAllocationPickerOpen(false);
     setAllocationSearch("");
   };
+
+  // mBanking import helpers
+  const handleParseMB = () => {
+    const parsed = parseMBankingText(mbText);
+    setMbParsed(parsed);
+    if (parsed.amount != null) {
+      setField("amount", String(parsed.amount));
+    }
+    if (parsed.type) {
+      setType(parsed.type);
+      // delay to allow type switch to clear fields then re-apply
+      window.setTimeout(() => {
+        if (parsed.amount != null) setField("amount", String(parsed.amount));
+        if (parsed.note) setField("note", parsed.note.slice(0, 90));
+      }, 50);
+    } else if (parsed.note) {
+      setField("note", parsed.note.slice(0, 90));
+    }
+    if (parsed.amount || parsed.type) {
+      notify(parsed.confidence === "high" ? `Terdeteksi ${parsed.bank || "Bank"} Rp${parsed.amount?.toLocaleString("id-ID")} — cek lagi sebelum simpan` : "Terisi dari notifikasi — silakan cek");
+    } else {
+      notify(parsed.hint || "Nominal tidak terdeteksi. Isi manual ya.");
+    }
+  };
+
+  const handleApplyMB = () => {
+    if (!mbParsed) return;
+    if (mbParsed.amount != null) setField("amount", String(mbParsed.amount));
+    if (mbParsed.type) setType(mbParsed.type);
+    if (mbParsed.note) setField("note", mbParsed.note.slice(0, 90));
+  };
+
+  // Auto-handle Web Share Target: ?text=... or ?title=... when sheet opens
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const shared = params.get("text") || params.get("title") || params.get("url") || "";
+      if (shared && shared.length > 8) {
+        setShowMBImport(true);
+        setMbText((prev) => (prev ? prev : shared));
+        const parsed = parseMBankingText(shared);
+        setMbParsed(parsed);
+        // clean URL without reload
+        const url = new URL(window.location.href);
+        url.searchParams.delete("text");
+        url.searchParams.delete("title");
+        url.searchParams.delete("url");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch {
+      // ignore
+    }
+  }, [open]);
 
   const submitQuickCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -344,7 +430,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
         categoryId,
         accountId: isExpense
           ? selectedBudget?.accountId || ""
-          : form.accountId || accountBalances.find((account: Account) => account.isActive)?.id,
+          : form.accountId || incomeWalletOptions.find((account: Account) => account.isActive)?.id || accountBalances.find((account: Account) => account.isActive)?.id,
         budgetId: isExpense ? form.budgetId || null : null,
       };
       if (editingTransaction) await updateTransaction(editingTransaction.id, payload);
@@ -396,6 +482,76 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
               </button>
             </div>
 
+            {/* mBanking import — paste/share notifikasi */}
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMBImport((v) => !v)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-2xl border px-3.5 py-2.5 text-left transition",
+                  showMBImport ? "border-rose-strong bg-rose-bg" : "border-dashed border-line bg-soft hover:bg-panel"
+                )}
+              >
+                <span className="grid gap-0.5">
+                  <strong className="text-xs font-black text-ink flex items-center gap-1.5">
+                    <Wallet size={14} className="text-rose-dark" /> Impor dari Notifikasi mBanking
+                  </strong>
+                  <small className="text-[11px] font-semibold text-muted-foreground">Tempel teks notifikasi BCA/Mandiri/BRI/OVO dll — auto isi nominal</small>
+                </span>
+                <span className={cn("rounded-full px-2.5 py-1 text-[10px] font-black border", showMBImport ? "bg-panel border-line text-rose-dark" : "bg-panel border-line text-muted-foreground")}>
+                  {showMBImport ? "Tutup" : "Tempel"}
+                </span>
+              </button>
+
+              {showMBImport && (
+                <div className="grid gap-2 rounded-[22px] border border-line bg-panel p-3">
+                  <p className="text-[11px] font-semibold text-muted-foreground">
+                    PWA tidak bisa baca notifikasi otomatis (keamanan Android/iOS). Silakan <b>copy</b> teks notifikasi mBanking lalu <b>paste</b> di sini, atau gunakan <b>Share</b> → KeuanganKu jika ada. iOS wajib paste manual.
+                  </p>
+                  <textarea
+                    value={mbText}
+                    onChange={(e) => setMbText(e.target.value)}
+                    placeholder="Contoh: BCA mobile - TRF E-BANKING DB Rp 150.000 dari Rek ... atau OVO Cash Rp 50.000 diterima"
+                    className={cn(fieldClassName, "h-auto min-h-[84px] py-3")}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleParseMB}
+                      disabled={!mbText.trim()}
+                      className="flex-1 rounded-2xl border border-line bg-panel-strong px-3 py-2.5 text-xs font-black text-rose-dark shadow-soft transition hover:bg-rose-bg disabled:opacity-50"
+                    >
+                      Deteksi & Isi Form
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMbText(""); setMbParsed(null); }}
+                      className="rounded-2xl border border-line bg-soft px-3 py-2.5 text-xs font-black text-muted-foreground"
+                    >
+                      Bersihkan
+                    </button>
+                  </div>
+                  {mbParsed && (
+                    <div className={cn("rounded-2xl border p-2.5 text-xs", mbParsed.confidence === "high" ? "border-green-border bg-green-bg text-green" : mbParsed.confidence === "medium" ? "border-amber-500/20 bg-amber-500/10 text-amber-700" : "border-red-border bg-red-bg text-red")}>
+                      <p className="font-black">
+                        {mbParsed.bank ? `[${mbParsed.bank}] ` : ""}Rp{mbParsed.amount != null ? mbParsed.amount.toLocaleString("id-ID") : "?"} {mbParsed.type ? `· ${mbParsed.type === "income" ? "Pemasukan" : "Pengeluaran"}` : ""} · {mbParsed.confidence}
+                      </p>
+                      {mbParsed.note && <p className="mt-1 font-semibold">Catatan: {mbParsed.note}</p>}
+                      {mbParsed.hint && <p className="mt-1 font-semibold opacity-80">{mbParsed.hint}</p>}
+                      {mbParsed.amount != null && (
+                        <button type="button" onClick={handleApplyMB} className="mt-2 w-full rounded-xl bg-panel border border-line px-3 py-1.5 text-[11px] font-black text-ink">
+                          Terapkan ke form
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-[10px] font-semibold text-muted-foreground">
+                    Parser lokal (on-device), nominal & catatan hanya saran — <b>wajib cek alokasi/dompet</b> sebelum Simpan. Alokasi tetap wajib dipilih untuk pengeluaran.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-field-border bg-field-bg p-1">
               <button
                 type="button"
@@ -437,7 +593,29 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
             {form.type === "expense" ? (
               <div className="grid gap-2">
-                <label className={labelClassName}>Alokasi Anggaran</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className={labelClassName}>Alokasi Anggaran</label>
+                  {isManager && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllWallets((v) => !v)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                        showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
+                      )}
+                    >
+                      {showAllWallets ? "Semua dompet" : "Dompet saya"}
+                    </button>
+                  )}
+                </div>
+                {!isManager && availableBudgets.length > 0 && (
+                  <small className="text-[10px] font-semibold text-muted-foreground">Hanya alokasi dari dompet milik Anda yang tampil</small>
+                )}
+                {availableBudgets.length === 0 && (
+                  <small className="text-[11px] font-semibold text-muted-foreground">
+                    Belum ada alokasi dari dompet milik Anda di periode ini. Buat alokasi dengan dompet Anda di Budget.
+                  </small>
+                )}
                 <button
                   type="button"
                   onClick={() => setAllocationPickerOpen(true)}
@@ -531,21 +709,41 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
                   )}
                 </div>
                 <div className="grid gap-2">
-                  <label className={labelClassName}>Dompet Tujuan</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className={labelClassName}>Dompet Tujuan</label>
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllWallets((v) => !v)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                          showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
+                        )}
+                      >
+                        {showAllWallets ? "Semua dompet" : "Dompet saya"}
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={form.accountId}
                     onChange={(event) => setField("accountId", event.target.value)}
                     className={cn(fieldClassName, "appearance-none")}
                   >
                     <option value="">Pilih</option>
-                    {(accountBalances as Account[])
-                      .filter((acc) => acc.isActive)
-                      .map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
+                    {incomeWalletOptions.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
                   </select>
+                  {incomeWalletOptions.length === 0 && (
+                    <small className="text-[11px] font-semibold text-muted-foreground">
+                      Belum ada dompet milik Anda. Buat dompet di Pengaturan → Dompet Keluarga.
+                    </small>
+                  )}
+                  {!isManager && incomeWalletOptions.length > 0 && (
+                    <small className="text-[10px] font-semibold text-muted-foreground">Hanya dompet milik Anda yang tampil</small>
+                  )}
                 </div>
               </div>
             )}
