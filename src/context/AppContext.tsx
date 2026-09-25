@@ -278,6 +278,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(true);
   const refreshInFlightRef = useRef(false);
+  const pendingTxNotifsRef = useRef<AppNotification[]>([]);
+  const txCoalesceTimerRef = useRef<number | undefined>(undefined);
+  const pendingPushRef = useRef<{ count: number; familyId: string; title: string; message: string; target: string; type: string } | null>(null);
+  const pushCoalesceTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -286,6 +290,117 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const notify = (message: string) => setToast(message);
+
+  const flushTxCoalesce = useCallback(() => {
+    const pending = pendingTxNotifsRef.current;
+    if (pending.length === 0) return;
+    pendingTxNotifsRef.current = [];
+    window.clearTimeout(txCoalesceTimerRef.current);
+    txCoalesceTimerRef.current = undefined;
+    if (pending.length === 1) {
+      const n = pending[0];
+      notify(n.title);
+      showBrowserNotification(n.title, n.message);
+    } else {
+      const count = pending.length;
+      const title = `${count} transaksi baru dicatat`;
+      const total = pending.reduce((sum, n) => {
+        // Try to extract amount from message if possible, else just count
+        return sum;
+      }, 0);
+      // Use last message as preview but indicate coalesced
+      const body = `Ada ${count} pencatatan baru di keluarga Anda — buka untuk detail.`;
+      // Also push combined to state already handled per each, but we have already setState per each insert
+      // Show one combined toast/notification
+      notify(title);
+      // Use tag coalescing so OS shows one
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          // Prefer SW path if available, else fallback to showBrowserNotification which already does sound
+          // We directly call showBrowserNotification with coalesced title/body (it will play sound)
+          showBrowserNotification(title, body);
+        } catch {
+          // fallback
+        }
+      } else {
+        // Still play sound via tryPlay
+        tryPlayNotificationSound();
+        notify(body);
+      }
+    }
+  }, []);
+
+  const queueTxNotification = useCallback((notification: AppNotification) => {
+    if (notification.type !== "transaction") {
+      // Non-transaction: show immediately
+      notify(notification.title);
+      showBrowserNotification(notification.title, notification.message);
+      return;
+    }
+    // Dedup by id to avoid double-count for creator's optimistic + realtime echo
+    if (pendingTxNotifsRef.current.some((n) => n.id === notification.id)) return;
+    pendingTxNotifsRef.current = [...pendingTxNotifsRef.current, notification];
+    window.clearTimeout(txCoalesceTimerRef.current);
+    txCoalesceTimerRef.current = window.setTimeout(() => {
+      flushTxCoalesce();
+    }, 1400);
+    // If buffer grows large, flush early at 5
+    if (pendingTxNotifsRef.current.length >= 5) {
+      window.clearTimeout(txCoalesceTimerRef.current);
+      flushTxCoalesce();
+    }
+  }, [flushTxCoalesce]);
+
+  const flushPushCoalesced = useCallback(async () => {
+    const pending = pendingPushRef.current;
+    if (!pending) return;
+    pendingPushRef.current = null;
+    window.clearTimeout(pushCoalesceTimerRef.current);
+    pushCoalesceTimerRef.current = undefined;
+    const { familyId, title, message, target, type, count } = pending;
+    let finalTitle = title;
+    let finalBody = message;
+    if (count > 1) {
+      finalTitle = `${count} transaksi baru dicatat`;
+      finalBody = `Ada ${count} pencatatan baru di keluarga Anda — buka untuk detail.`;
+    }
+    try {
+      await supabase.functions.invoke("push-notify", {
+        body: {
+          family_id: familyId,
+          title: finalTitle,
+          body: finalBody,
+          message: finalBody,
+          target,
+          type,
+        },
+      });
+    } catch (e) {
+      console.warn("push-notify invoke failed", e);
+    }
+  }, []);
+
+  const schedulePushCoalesced = useCallback((payload: { familyId: string; title: string; message: string; target: string; type: string }) => {
+    const existing = pendingPushRef.current;
+    if (existing && existing.familyId === payload.familyId) {
+      // Increment count, keep latest title/message as base but count matters for coalesced
+      pendingPushRef.current = {
+        ...existing,
+        count: existing.count + 1,
+        // Keep original title/message for single, but final will be coalesced if >1
+      };
+    } else {
+      pendingPushRef.current = { ...payload, count: 1 };
+    }
+    window.clearTimeout(pushCoalesceTimerRef.current);
+    pushCoalesceTimerRef.current = window.setTimeout(() => {
+      flushPushCoalesced();
+    }, 1300);
+    if (pendingPushRef.current.count >= 5) {
+      window.clearTimeout(pushCoalesceTimerRef.current);
+      flushPushCoalesced();
+    }
+  }, [flushPushCoalesced]);
 
   const fetchProfile = useCallback(async (authUser: User): Promise<UserProfile> => {
     const { data, error } = await supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle();
@@ -478,8 +593,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
           }));
 
-          notify(notification.title);
-          showBrowserNotification(notification.title, notification.message);
+          // Coalesce transaction notifications, immediate for others
+          if (notification.type === "transaction") {
+            queueTxNotification(notification);
+          } else {
+            notify(notification.title);
+            showBrowserNotification(notification.title, notification.message);
+          }
         }
       )
       .subscribe();
@@ -526,6 +646,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [state.household?.id, state.user?.id, refreshData]);
 
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(txCoalesceTimerRef.current);
+      window.clearTimeout(pushCoalesceTimerRef.current);
+    };
+  }, []);
+
   const requestNotificationPermission = async (): Promise<NotificationPermission | "unsupported"> => {
     if (typeof window === "undefined" || !("Notification" in window)) {
       notify("Browser ini belum mendukung notifikasi.");
@@ -545,6 +672,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     userId = null,
   }: NotificationPayload): Promise<AppNotification | null> => {
     if (!state.household?.id || !title) return null;
+
+    // Manager-only fan-out for transaction notifications (owner/admin saja)
+    const isTransactionForManagers = type === "transaction" && target === "transactions" && userId === null;
+    if (isTransactionForManagers) {
+      const managers = state.familyMembers.filter((m) => ["owner", "admin"].includes(m.role));
+      // Fallback to broadcast if no managers found (should not happen)
+      const recipients = managers.length > 0 ? managers : state.familyMembers.slice(0, 1);
+      const rows = recipients.map((m) => ({
+        family_id: state.household!.id,
+        user_id: m.userId,
+        type,
+        title,
+        message: message || null,
+        target,
+      }));
+      const { data, error } = await supabase.from("notifications").insert(rows).select("*");
+      if (error) {
+        console.warn("Notification insert skipped:", error.message);
+        return null;
+      }
+      const notifs = (data as unknown[]).map((row) => toNotification(row as Parameters<typeof toNotification>[0]));
+      // Optimistic: add only current user's notif to local state immediately, others will arrive via realtime
+      const myNotif = notifs.find((n) => n.userId === state.user?.id) || notifs[0];
+      if (myNotif) {
+        setState((prev) => ({
+          ...prev,
+          notifications: [myNotif, ...prev.notifications.filter((item) => item.id !== myNotif.id)].slice(0, 50),
+        }));
+        queueTxNotification(myNotif);
+      }
+      // Trigger background push coalesced (one per family per batch)
+      schedulePushCoalesced({
+        familyId: state.household!.id,
+        title,
+        message: message || "",
+        target,
+        type,
+      });
+      return myNotif || null;
+    }
 
     const { data, error } = await supabase
       .from("notifications")
@@ -570,7 +737,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
     }));
-    showBrowserNotification(notification.title, notification.message);
+    // Use coalesced queue for transaction, immediate for others
+    if (type === "transaction") {
+      queueTxNotification(notification);
+      schedulePushCoalesced({
+        familyId: state.household!.id,
+        title,
+        message: message || "",
+        target,
+        type,
+      });
+    } else {
+      showBrowserNotification(notification.title, notification.message);
+      // Also trigger push for non-transaction? Only managers? For now broadcast push for others if needed
+      // For manager-only push, we still want push for transaction only; other types can be broadcast via realtime only
+      // So we still invoke push for other types if they are manager-relevant
+      if (["budget", "account", "goal", "member"].includes(type)) {
+        schedulePushCoalesced({
+          familyId: state.household!.id,
+          title,
+          message: message || "",
+          target,
+          type,
+        });
+      }
+    }
     return notification;
   };
 

@@ -47,6 +47,7 @@ import {
   setSoundEnabled,
   triggerTestNotification,
 } from "@/utils/notificationSound";
+import { isPushSupported, isSubscribed as isPushSubscribed, subscribePush, unsubscribePush } from "@/utils/push";
 
 const roleLabel: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 const accountTypeLabel: Record<string, string> = {
@@ -264,6 +265,9 @@ export default function Settings({ view = "menu" }: SettingsProps) {
   const [installingPWA, setInstallingPWA] = useState(false);
   const [testingNotif, setTestingNotif] = useState(false);
   const [showIOSHelp, setShowIOSHelp] = useState(false);
+  const [pushSupported] = useState(() => isPushSupported());
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
 
   // Keep permission in sync when tab refocuses or permission changes externally
   useEffect(() => {
@@ -275,6 +279,35 @@ export default function Settings({ view = "menu" }: SettingsProps) {
       document.removeEventListener("visibilitychange", sync);
     };
   }, []);
+
+  // Sync push subscription status (background push)
+  useEffect(() => {
+    if (!pushSupported || !household?.id) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const sub = await isPushSubscribed(household.id);
+        if (!cancelled) setPushSubscribed(sub);
+      } catch {
+        if (!cancelled) setPushSubscribed(false);
+      }
+    };
+    check();
+    const onFocus = () => check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    // Also listen for pushsubscriptionchange from SW
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === "PUSH_SUBSCRIPTION_CHANGE") check();
+    };
+    navigator.serviceWorker?.addEventListener?.("message", onMessage as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      navigator.serviceWorker?.removeEventListener?.("message", onMessage as EventListener);
+    };
+  }, [pushSupported, household?.id]);
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
@@ -377,6 +410,70 @@ export default function Settings({ view = "menu" }: SettingsProps) {
       }
     } finally {
       window.setTimeout(() => setTestingNotif(false), 800);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    if (!pushSupported) {
+      notify("Push latar belakang tidak didukung di browser/perangkat ini.");
+      return;
+    }
+    if (!household?.id) {
+      notify("Keluarga belum tersedia.");
+      return;
+    }
+    const isMgr = ["owner", "admin"].includes(currentMember?.role || "");
+    if (!isMgr) {
+      notify("Hanya Owner/Admin yang dapat menerima push transaksi (sesuai pengaturan).");
+      return;
+    }
+    setPushLoading(true);
+    try {
+      if (pushSubscribed) {
+        const res = await unsubscribePush();
+        if (res.ok) {
+          setPushSubscribed(false);
+          notify("Push latar belakang dimatikan.");
+        } else {
+          notify(res.error || "Gagal mematikan push.");
+        }
+      } else {
+        if (notifPermission !== "granted") {
+          const perm = await Notification.requestPermission();
+          setNotifPermission(perm as NotificationPermission);
+          if (perm !== "granted") {
+            notify("Izin notifikasi diperlukan untuk push.");
+            return;
+          }
+        }
+        if (!pwa.isInstalled && !pwa.canInstall && !pwa.isIOS) {
+          notify("Disarankan install PWA dulu agar push stabil saat app tertutup.");
+        }
+        const res = await subscribePush(household.id);
+        if (res.ok) {
+          setPushSubscribed(true);
+          notify("Push latar belakang aktif ✅ — Anda akan dapat notifikasi bahkan saat app tertutup (perlu install PWA).");
+          // Kirim test push via Edge Function untuk verifikasi background
+          try {
+            await supabase.functions.invoke("push-notify", {
+              body: {
+                family_id: household.id,
+                title: "KeuanganKu — Push aktif",
+                body: `Halo ${user?.name || "Kamu"}! Push latar belakang aktif — coba tutup app dan minta rekan catat transaksi.`,
+                target: "transactions",
+                type: "general",
+              },
+            });
+            if (soundEnabled) playNotificationSound(0.72);
+          } catch {
+            // ignore, push test is best-effort (perlu deploy Edge Function & VAPID di Supabase)
+          }
+        } else {
+          notify(res.error || "Gagal mengaktifkan push. Cek VAPID dan izin browser.");
+        }
+      }
+    } finally {
+      setPushLoading(false);
     }
   };
 
@@ -954,6 +1051,63 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                 />
               </button>
             </div>
+
+            {/* Background Push - khusus Owner/Admin, digabung 1, per-akun read */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-3">
+              <div className="min-w-0 flex items-center gap-2.5">
+                <span className={cn("grid size-9 place-items-center rounded-xl border text-rose-dark shrink-0", pushSubscribed ? "bg-green-bg border-green-border text-green" : "bg-soft border-line")}>
+                  {pushSubscribed ? <BellRing size={16} /> : pushSupported ? <Bell size={16} /> : <BellOff size={16} />}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-ink">Push Latar Belakang</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground leading-tight">
+                    {pushSubscribed
+                      ? "Aktif — Owner/Admin dapat notif saat app tertutup"
+                      : !pushSupported
+                        ? "Browser tidak dukung push"
+                        : !(isOwner || isAdmin)
+                          ? "Hanya Owner/Admin yang menerima push transaksi"
+                          : notifPermission !== "granted"
+                            ? "Aktifkan notifikasi browser dulu"
+                            : !pwa.isInstalled && pwa.isIOS
+                              ? "Install PWA (Add to Home Screen) dulu"
+                              : "Belum aktif — untuk notif saat tertutup"}
+                  </p>
+                </div>
+              </div>
+              {!(isOwner || isAdmin) ? (
+                <span className="rounded-full border border-line bg-soft px-2.5 py-1.5 text-[10px] font-black text-muted-foreground shrink-0">Hanya Manager</span>
+              ) : !pushSupported ? (
+                <span className="rounded-full border border-line bg-soft px-2.5 py-1.5 text-[10px] font-black text-muted-foreground shrink-0">N/A</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={pushLoading || notifPermission !== "granted"}
+                  onClick={handleTogglePush}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-black shrink-0 transition",
+                    pushSubscribed
+                      ? "border-red-border bg-red-bg text-red"
+                      : "border-transparent text-on-accent shadow-accent [background-image:var(--gradient-brand)] disabled:opacity-50"
+                  )}
+                >
+                  {pushLoading ? "..." : pushSubscribed ? "Matikan" : "Aktifkan"}
+                </button>
+              )}
+            </div>
+            {pushSubscribed && (
+              <div className="rounded-2xl border border-green-border bg-green-bg p-3 text-xs leading-relaxed font-semibold text-green">
+                <p className="font-black flex items-center gap-1.5"><Check size={12} /> Push aktif untuk akun ini</p>
+                <p className="mt-1">Notifikasi transaksi akan masuk bahkan saat app tertutup (butuh install PWA). Jika ada 5 transaksi beruntun, akan digabung jadi 1 notifikasi. Status baca per-akun terpisah.</p>
+              </div>
+            )}
+            {!pushSubscribed && (isOwner || isAdmin) && pushSupported && (
+              <div className="rounded-2xl border border-line bg-soft p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
+                <p className="font-black text-ink">Cara kerja:</p>
+                <p className="mt-1">Aktifkan push → browser simpan subscription (endpoint) ke <code>push_subscriptions</code>. Saat rekan mencatat pemasukan/pengeluaran, server kirim push ke semua Owner/Admin yang subscribe (Member tidak dapat). Jika banyak transaksi bersamaan, digabung jadi 1.</p>
+                <p className="mt-1 text-[11px]">Butuh Edge Function <code>push-notify</code> ter-deploy & VAPID di Supabase Dashboard → Edge Functions → Secrets.</p>
+              </div>
+            )}
 
             {/* Vibration hint + test button */}
             <div className="rounded-2xl border border-line bg-soft p-3 flex items-start gap-2.5">

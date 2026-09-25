@@ -432,3 +432,50 @@ export const notifications = pgTable(
     }),
   ]
 ).enableRLS();
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    familyId: uuid('family_id').notNull(),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    expirationTime: timestamp('expirationTime', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({ name: 'push_subscriptions_user_id_fkey', columns: [table.userId], foreignColumns: [profiles.id] }).onDelete('cascade'),
+    foreignKey({ name: 'push_subscriptions_family_id_fkey', columns: [table.familyId], foreignColumns: [families.id] }).onDelete('cascade'),
+    uniqueIndex('push_subscriptions_endpoint_unique_idx').on(table.endpoint),
+    index('push_subscriptions_user_id_idx').on(table.userId),
+    index('push_subscriptions_family_id_idx').on(table.familyId),
+    index('push_subscriptions_family_user_idx').on(table.familyId, table.userId),
+    check('push_subscriptions_endpoint_check', sql`length(btrim(${table.endpoint})) > 0`),
+    check('push_subscriptions_p256dh_check', sql`length(btrim(${table.p256dh})) > 0`),
+    check('push_subscriptions_auth_check', sql`length(btrim(${table.auth})) > 0`),
+    pgPolicy('push_subscriptions_select_own', {
+      for: 'select',
+      to: authenticatedRole,
+      using: sql`${table.userId} = auth.uid()`,
+    }),
+    pgPolicy('push_subscriptions_insert_own', {
+      for: 'insert',
+      to: authenticatedRole,
+      withCheck: sql`${table.userId} = auth.uid() and public.is_family_member(${table.familyId})`,
+    }),
+    pgPolicy('push_subscriptions_update_own', {
+      for: 'update',
+      to: authenticatedRole,
+      using: sql`${table.userId} = auth.uid()`,
+      withCheck: sql`${table.userId} = auth.uid()`,
+    }),
+    pgPolicy('push_subscriptions_delete_own', {
+      for: 'delete',
+      to: authenticatedRole,
+      using: sql`${table.userId} = auth.uid()`,
+    }),
+  ]
+).enableRLS();
