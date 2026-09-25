@@ -265,6 +265,7 @@ export default function Settings({ view = "menu" }: SettingsProps) {
   const [installingPWA, setInstallingPWA] = useState(false);
   const [testingNotif, setTestingNotif] = useState(false);
   const [showIOSHelp, setShowIOSHelp] = useState(false);
+  const [showManualHelp, setShowManualHelp] = useState(false);
   const [pushSupported] = useState(() => isPushSupported());
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -488,7 +489,8 @@ export default function Settings({ view = "menu" }: SettingsProps) {
       return;
     }
     if (!pwa.canInstall) {
-      notify("Belum bisa di-install otomatis. Gunakan Chrome/Edge > Menu ⋮ > Install / Add to Home Screen.");
+      setShowManualHelp((v) => !v);
+      if (!showManualHelp) notify("Ikuti petunjuk install manual di bawah 👇 — Chrome/Edge tetap bisa install via menu.");
       return;
     }
     setInstallingPWA(true);
@@ -921,23 +923,50 @@ export default function Settings({ view = "menu" }: SettingsProps) {
               </>
             ) : (
               <>
-                <p className="text-xs leading-relaxed font-semibold text-muted-foreground">Browser ini belum memicu prompt install otomatis.</p>
+                <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-black text-amber-700">
+                    <Info size={14} /> Install manual tersedia
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed font-semibold text-amber-700/80">
+                    Chrome/Edge belum menampilkan tombol otomatis (butuh HTTPS, ikon, dan service worker siap). Anda tetap bisa install manual lewat menu browser — ini sama amannya.
+                  </p>
+                </div>
                 <div className="rounded-2xl border border-line bg-soft p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
                   <p className="font-black text-ink flex items-center gap-1.5">
-                    <Download size={14} /> Cara lain:
+                    <Download size={14} /> Cara install manual:
                   </p>
                   <ul className="mt-1.5 grid gap-1 list-disc list-inside">
                     <li>
-                      <b>Chrome / Edge (Android & Desktop):</b> Menu ⋮ → <b>Install app</b> / <b>Save & Share</b> → <b>Install</b> / <b>Create shortcut</b> → <b>Open as window</b>
+                      <b>Android Chrome/Edge:</b> Buka di Chrome → Menu ⋮ (kanan atas) → <b>Install app</b> / <b>Tambahkan ke Layar Utama</b>
                     </li>
                     <li>
-                      <b>Jika menu tidak ada:</b> coba buka di Chrome terbaru, pastikan koneksi online, lalu refresh.
+                      <b>Desktop Chrome/Edge:</b> Menu ⋮ → <b>Save and share</b> → <b>Create shortcut</b> → centang <b>Open as window</b> → Create
+                    </li>
+                    <li>
+                      <b>Jika menu tidak ada:</b> Pastikan buka via <b>https</b> (bukan http), bukan Incognito, sudah reload 1x, dan ikon tidak 404.
                     </li>
                   </ul>
+                  <p className="mt-2 text-[11px] break-all">
+                    Link: <span className="font-mono bg-panel px-1 py-0.5 rounded border border-line">{typeof window !== "undefined" ? window.location.origin : "https://keuanganku.vercel.app"}</span>
+                  </p>
                 </div>
                 <button type="button" onClick={handleInstallPWA} className={secondaryButtonClassName}>
-                  <Download size={16} /> Coba Install
+                  <Info size={16} /> {showManualHelp ? "Sembunyikan Petunjuk" : "Lihat Petunjuk Lengkap"}
                 </button>
+                {showManualHelp && (
+                  <div className="rounded-2xl border border-line bg-panel p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
+                    <p className="font-black text-ink">Kenapa tombol otomatis tidak muncul?</p>
+                    <ul className="mt-1.5 grid gap-1 list-disc list-inside">
+                      <li>Butuh <b>service worker aktif</b> — pastikan bukan mode Incognito dan sudah reload.</li>
+                      <li>Chrome menunda prompt jika baru saja dismiss — tunggu 1 menit lalu refresh.</li>
+                      <li>Cek DevTools → Application → Manifest & Service Workers harus hijau (no error).</li>
+                      <li>Pastikan <code className="bg-soft px-1 rounded">/pwa-192x192.png</code> & <code className="bg-soft px-1 rounded">/pwa-512x512.png</code> bisa diakses.</li>
+                    </ul>
+                    <button type="button" onClick={() => window.location.reload()} className="mt-3 w-full rounded-xl bg-soft border border-line px-3 py-2 text-[11px] font-black text-ink">
+                      Muat Ulang Halaman
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
