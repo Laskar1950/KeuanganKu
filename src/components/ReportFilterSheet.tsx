@@ -142,13 +142,12 @@ export default function ReportFilterSheet({
           <div className="grid gap-2">
             <label className={labelClassName}>Tampilan Tren</label>
             <select value={granularity} onChange={(e) => onChangeGranularity(e.target.value as Granularity)} className={selectClassName}>
-              <option value="6months">6 Siklus Gajian (25–24) — Default</option>
-              <option value="monthly">Bulanan (Kalender)</option>
-              <option value="yearly">Tahunan</option>
-              <option value="weekly">Mingguan — Lainnya</option>
-              <option value="daily">Harian (Siklus) — Lainnya</option>
+              <option value="semester">Semester (6 Siklus Gajian) — Default</option>
+              <option value="daily">Harian (Siklus Terpilih)</option>
+              <option value="weekly">Mingguan (8 Minggu Terakhir)</option>
+              <option value="yearly">Tahunan (5 Tahun Terakhir)</option>
             </select>
-            <small className="text-[11px] font-semibold text-muted-foreground">3 default ditampilkan di Laporan, lainnya via filter ini. Harian mengikuti siklus terpilih.</small>
+            <small className="text-[11px] font-semibold text-muted-foreground">Pilihan rentang waktu untuk grafik tren arus kas.</small>
           </div>
         </div>
 

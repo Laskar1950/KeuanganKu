@@ -154,7 +154,7 @@ export function useTrendPeriods(
       });
     }
 
-    // 6months: 6 siklus gajian 25-24
+    // semester (atau 6months): 6 siklus gajian 25-24 (1 Semester)
     const periods: { month: number; year: number }[] = [];
     for (let offset = 5; offset >= 0; offset -= 1) {
       const date = new Date(selectedYear, selectedMonth - 1 - offset, 1);
@@ -179,9 +179,11 @@ export function useTrendPeriods(
 export function useBalancePoints(periods: ReturnType<typeof useTrendPeriods>) {
   return useMemo(() => {
     let running = 0;
-    return periods.map((p) => {
+    const result: Array<{ label: string; fullLabel: string; isActive: boolean; balance: number }> = [];
+    for (const p of periods) {
       running += p.income - p.expense;
-      return { label: p.label, fullLabel: p.fullLabel, isActive: p.isActive, balance: running };
-    });
+      result.push({ label: p.label, fullLabel: p.fullLabel, isActive: p.isActive, balance: running });
+    }
+    return result;
   }, [periods]);
 }

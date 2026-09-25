@@ -7,7 +7,7 @@ export interface DonutRow {
   value: number;
 }
 
-export type Granularity = "daily" | "weekly" | "monthly" | "6months" | "yearly";
+export type Granularity = "daily" | "weekly" | "semester" | "yearly" | "monthly" | "6months";
 
 export interface TrendPeriod {
   month: number;
@@ -208,8 +208,8 @@ export interface BalancePoint {
 }
 
 export function BalanceLineChart({ points, compact = false }: { points: BalancePoint[]; compact?: boolean }) {
-  if (!points.length) return null;
   const uid = useId();
+  if (!points.length) return null;
   const gradId = `balanceLineGrad-${uid}`;
   const values = points.map((p) => p.balance);
   const max = Math.max(...values, 1);
