@@ -423,11 +423,6 @@ export default function Settings({ view = "menu" }: SettingsProps) {
       notify("Keluarga belum tersedia.");
       return;
     }
-    const isMgr = ["owner", "admin"].includes(currentMember?.role || "");
-    if (!isMgr) {
-      notify("Hanya Owner/Admin yang dapat menerima push transaksi (sesuai pengaturan).");
-      return;
-    }
     setPushLoading(true);
     try {
       if (pushSubscribed) {
@@ -1081,7 +1076,7 @@ export default function Settings({ view = "menu" }: SettingsProps) {
               </button>
             </div>
 
-            {/* Background Push - khusus Owner/Admin, digabung 1, per-akun read */}
+            {/* Background Push - untuk seluruh anggota keluarga */}
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-3">
               <div className="min-w-0 flex items-center gap-2.5">
                 <span className={cn("grid size-9 place-items-center rounded-xl border text-rose-dark shrink-0", pushSubscribed ? "bg-green-bg border-green-border text-green" : "bg-soft border-line")}>
@@ -1091,22 +1086,18 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                   <p className="text-xs font-black text-ink">Push Latar Belakang</p>
                   <p className="text-[11px] font-semibold text-muted-foreground leading-tight">
                     {pushSubscribed
-                      ? "Aktif — Owner/Admin dapat notif saat app tertutup"
+                      ? "Aktif — Notifikasi masuk saat app tertutup"
                       : !pushSupported
                         ? "Browser tidak dukung push"
-                        : !(isOwner || isAdmin)
-                          ? "Hanya Owner/Admin yang menerima push transaksi"
-                          : notifPermission !== "granted"
-                            ? "Aktifkan notifikasi browser dulu"
-                            : !pwa.isInstalled && pwa.isIOS
-                              ? "Install PWA (Add to Home Screen) dulu"
-                              : "Belum aktif — untuk notif saat tertutup"}
+                        : notifPermission !== "granted"
+                          ? "Aktifkan notifikasi browser dulu"
+                          : !pwa.isInstalled && pwa.isIOS
+                            ? "Install PWA (Add to Home Screen) dulu"
+                            : "Belum aktif — untuk notif saat tertutup"}
                   </p>
                 </div>
               </div>
-              {!(isOwner || isAdmin) ? (
-                <span className="rounded-full border border-line bg-soft px-2.5 py-1.5 text-[10px] font-black text-muted-foreground shrink-0">Hanya Manager</span>
-              ) : !pushSupported ? (
+              {!pushSupported ? (
                 <span className="rounded-full border border-line bg-soft px-2.5 py-1.5 text-[10px] font-black text-muted-foreground shrink-0">N/A</span>
               ) : (
                 <button
@@ -1127,14 +1118,13 @@ export default function Settings({ view = "menu" }: SettingsProps) {
             {pushSubscribed && (
               <div className="rounded-2xl border border-green-border bg-green-bg p-3 text-xs leading-relaxed font-semibold text-green">
                 <p className="font-black flex items-center gap-1.5"><Check size={12} /> Push aktif untuk akun ini</p>
-                <p className="mt-1">Notifikasi transaksi akan masuk bahkan saat app tertutup (butuh install PWA). Jika ada 5 transaksi beruntun, akan digabung jadi 1 notifikasi. Status baca per-akun terpisah.</p>
+                <p className="mt-1">Notifikasi transaksi dari seluruh anggota keluarga akan masuk bahkan saat aplikasi ditutup (disarankan install PWA). Status baca per-akun terpisah.</p>
               </div>
             )}
-            {!pushSubscribed && (isOwner || isAdmin) && pushSupported && (
+            {!pushSubscribed && pushSupported && (
               <div className="rounded-2xl border border-line bg-soft p-3 text-xs leading-relaxed font-semibold text-muted-foreground">
                 <p className="font-black text-ink">Cara kerja:</p>
-                <p className="mt-1">Aktifkan push → browser simpan subscription (endpoint) ke <code>push_subscriptions</code>. Saat rekan mencatat pemasukan/pengeluaran, server kirim push ke semua Owner/Admin yang subscribe (Member tidak dapat). Jika banyak transaksi bersamaan, digabung jadi 1.</p>
-                <p className="mt-1 text-[11px]">Butuh Edge Function <code>push-notify</code> ter-deploy & VAPID di Supabase Dashboard → Edge Functions → Secrets.</p>
+                <p className="mt-1">Saat anggota keluarga mencatat pemasukan atau pengeluaran, semua anggota keluarga yang mengaktifkan push akan menerima notifikasi otomatis di perangkatnya.</p>
               </div>
             )}
 

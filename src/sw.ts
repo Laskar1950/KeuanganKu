@@ -32,7 +32,17 @@ registerRoute(
 
 // --- Push handling ---
 self.addEventListener('push', (event: PushEvent) => {
-  let data: { title?: string; body?: string; icon?: string; badge?: string; tag?: string; target?: string; url?: string; count?: number } = {};
+  let data: {
+    title?: string;
+    body?: string;
+    icon?: string;
+    badge?: string;
+    tag?: string;
+    target?: string;
+    url?: string;
+    count?: number;
+    type?: string;
+  } = {};
   try {
     if (event.data) {
       // Try JSON, fallback to text
@@ -47,13 +57,31 @@ self.addEventListener('push', (event: PushEvent) => {
     data = { title: 'KeuanganKu', body: 'Ada aktivitas baru di keluarga Anda.' };
   }
 
-  const title = data.title || 'KeuanganKu — Transaksi Baru';
+  const type = data.type || 'transaction';
+  const defaultTitle =
+    type === 'expense'
+      ? 'KeuanganKu — Pengeluaran Baru'
+      : type === 'income'
+        ? 'KeuanganKu — Pemasukan Baru'
+        : 'KeuanganKu — Aktivitas Baru';
+
+  const title = data.title || defaultTitle;
   const body = data.body || 'Ada pencatatan baru di keluarga Anda.';
-  const tag = data.tag || 'keuanganku-transaction';
+  const tag = data.tag || (type === 'expense' || type === 'income' || type === 'transaction' ? 'keuanganku-transaction' : `keuanganku-${type}`);
   const icon = data.icon || '/pwa-192x192.png';
   const badge = data.badge || '/pwa-192x192.png';
 
-  // Coalesce tag ensures single notification; renotify true to alert again even if tag same
+  // Distinct vibration pattern based on type:
+  // Income: double cheerful pulse [80, 40, 80, 40, 80]
+  // Expense: single solid pulse [120, 60, 120]
+  // Others: [90, 40, 90]
+  const vibrate =
+    type === 'income'
+      ? [80, 40, 80, 40, 80]
+      : type === 'expense'
+        ? [120, 60, 120]
+        : [90, 40, 90];
+
   const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body,
     icon,
@@ -61,8 +89,9 @@ self.addEventListener('push', (event: PushEvent) => {
     tag,
     renotify: true,
     requireInteraction: false,
-    vibrate: [90, 40, 90],
+    vibrate,
     data: {
+      type,
       target: data.target || 'transactions',
       url: data.url || '/',
       dateOfArrival: Date.now(),

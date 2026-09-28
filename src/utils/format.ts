@@ -39,3 +39,24 @@ export const sanitizeNumericInput = (value: string): string => String(value || "
 
 export const monthLabel = (month: number, year: number): string =>
   new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+
+export const formatRelativeTime = (isoDate?: string | null): string => {
+  if (!isoDate) return "-";
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  if (Number.isNaN(diffMs)) return "-";
+
+  if (diffMs < 0) return "Baru saja";
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "Baru saja";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} mnt lalu`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} jam lalu`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay === 1) return "Kemarin";
+  if (diffDay < 7) return `${diffDay} hr lalu`;
+
+  return formatDate(isoDate);
+};

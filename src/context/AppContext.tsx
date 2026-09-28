@@ -16,6 +16,7 @@ import {
 import { calculateAccountBalance, getBudgetUsage } from "@/utils/calculations";
 import { getBudgetCycle, getBudgetCycleTransactions } from "@/utils/budgetCycle";
 import { toLocalDateKey } from "@/utils/format";
+import { subscribePush } from "@/utils/push";
 import { getPermissions, isManagerRole, type Permissions } from "@/utils/permissions";
 import type {
   Account,
@@ -280,7 +281,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshInFlightRef = useRef(false);
   const pendingTxNotifsRef = useRef<AppNotification[]>([]);
   const txCoalesceTimerRef = useRef<number | undefined>(undefined);
-  const pendingPushRef = useRef<{ count: number; familyId: string; title: string; message: string; target: string; type: string } | null>(null);
+  const pendingPushRef = useRef<{ count: number; familyId: string; title: string; message: string; target: string; type: string; excludeUserId?: string } | null>(null);
   const pushCoalesceTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -304,26 +305,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else {
       const count = pending.length;
       const title = `${count} transaksi baru dicatat`;
-      const total = pending.reduce((sum, n) => {
-        // Try to extract amount from message if possible, else just count
-        return sum;
-      }, 0);
-      // Use last message as preview but indicate coalesced
       const body = `Ada ${count} pencatatan baru di keluarga Anda — buka untuk detail.`;
-      // Also push combined to state already handled per each, but we have already setState per each insert
-      // Show one combined toast/notification
       notify(title);
-      // Use tag coalescing so OS shows one
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
         try {
-          // Prefer SW path if available, else fallback to showBrowserNotification which already does sound
-          // We directly call showBrowserNotification with coalesced title/body (it will play sound)
           showBrowserNotification(title, body);
         } catch {
           // fallback
         }
       } else {
-        // Still play sound via tryPlay
         tryPlayNotificationSound();
         notify(body);
       }
@@ -331,7 +321,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const queueTxNotification = useCallback((notification: AppNotification) => {
-    if (notification.type !== "transaction") {
+    const isTx = notification.type === "transaction" || notification.type === "expense" || notification.type === "income";
+    if (!isTx) {
       // Non-transaction: show immediately
       notify(notification.title);
       showBrowserNotification(notification.title, notification.message);
@@ -357,7 +348,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pendingPushRef.current = null;
     window.clearTimeout(pushCoalesceTimerRef.current);
     pushCoalesceTimerRef.current = undefined;
-    const { familyId, title, message, target, type, count } = pending;
+    const { familyId, title, message, target, type, count, excludeUserId } = pending;
     let finalTitle = title;
     let finalBody = message;
     if (count > 1) {
@@ -373,6 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           message: finalBody,
           target,
           type,
+          exclude_user_id: excludeUserId,
         },
       });
     } catch (e) {
@@ -380,14 +372,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const schedulePushCoalesced = useCallback((payload: { familyId: string; title: string; message: string; target: string; type: string }) => {
+  const schedulePushCoalesced = useCallback((payload: { familyId: string; title: string; message: string; target: string; type: string; excludeUserId?: string }) => {
     const existing = pendingPushRef.current;
     if (existing && existing.familyId === payload.familyId) {
-      // Increment count, keep latest title/message as base but count matters for coalesced
       pendingPushRef.current = {
         ...existing,
         count: existing.count + 1,
-        // Keep original title/message for single, but final will be coalesced if >1
       };
     } else {
       pendingPushRef.current = { ...payload, count: 1 };
@@ -594,7 +584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }));
 
           // Coalesce transaction notifications, immediate for others
-          if (notification.type === "transaction") {
+          if (notification.type === "transaction" || notification.type === "expense" || notification.type === "income") {
             queueTxNotification(notification);
           } else {
             notify(notification.title);
@@ -607,7 +597,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [state.household?.id, state.user?.id]);
+  }, [state.household?.id, state.user?.id, queueTxNotification]);
 
   useEffect(() => {
     if (!state.household?.id || !state.user?.id) return undefined;
@@ -660,7 +650,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const permission = await window.Notification.requestPermission();
-    notify(permission === "granted" ? "Notifikasi browser diaktifkan." : "Izin notifikasi belum diberikan.");
+    if (permission === "granted") {
+      notify("Notifikasi browser diaktifkan.");
+      if (state.household?.id) {
+        try {
+          await subscribePush(state.household.id);
+        } catch (e) {
+          console.warn("Auto-subscribe push on permission grant failed:", e);
+        }
+      }
+    } else {
+      notify("Izin notifikasi belum diberikan.");
+    }
     return permission;
   };
 
@@ -673,12 +674,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }: NotificationPayload): Promise<AppNotification | null> => {
     if (!state.household?.id || !title) return null;
 
-    // Manager-only fan-out for transaction notifications (owner/admin saja)
-    const isTransactionForManagers = type === "transaction" && target === "transactions" && userId === null;
-    if (isTransactionForManagers) {
-      const managers = state.familyMembers.filter((m) => ["owner", "admin"].includes(m.role));
-      // Fallback to broadcast if no managers found (should not happen)
-      const recipients = managers.length > 0 ? managers : state.familyMembers.slice(0, 1);
+    // Family-wide fan-out for transaction notifications (semua akun dalam keluarga)
+    const isTx = type === "transaction" || type === "expense" || type === "income";
+    const isTransactionForFamily = isTx && target === "transactions" && userId === null;
+    if (isTransactionForFamily) {
+      const recipients = state.familyMembers.length > 0 ? state.familyMembers : [{ userId: state.user?.id }];
       const rows = recipients.map((m) => ({
         family_id: state.household!.id,
         user_id: m.userId,
@@ -702,13 +702,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
         queueTxNotification(myNotif);
       }
-      // Trigger background push coalesced (one per family per batch)
+      // Trigger background push coalesced to other family members (exclude current user who already sees toast)
       schedulePushCoalesced({
         familyId: state.household!.id,
         title,
         message: message || "",
         target,
         type,
+        excludeUserId: state.user?.id,
       });
       return myNotif || null;
     }
@@ -737,8 +738,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
     }));
-    // Use coalesced queue for transaction, immediate for others
-    if (type === "transaction") {
+    // Use coalesced queue for transaction/expense/income, immediate for others
+    if (isTx) {
       queueTxNotification(notification);
       schedulePushCoalesced({
         familyId: state.household!.id,
@@ -746,12 +747,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         message: message || "",
         target,
         type,
+        excludeUserId: state.user?.id,
       });
     } else {
       showBrowserNotification(notification.title, notification.message);
-      // Also trigger push for non-transaction? Only managers? For now broadcast push for others if needed
-      // For manager-only push, we still want push for transaction only; other types can be broadcast via realtime only
-      // So we still invoke push for other types if they are manager-relevant
       if (["budget", "account", "goal", "member"].includes(type)) {
         schedulePushCoalesced({
           familyId: state.household!.id,
@@ -759,6 +758,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           message: message || "",
           target,
           type,
+          excludeUserId: state.user?.id,
         });
       }
     }
@@ -966,14 +966,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     if (error) throw error;
 
+    const targetAccount = state.accounts.find((a) => a.id === accountId);
+    const category = !isExpense && categoryId ? state.categories.find((c) => c.id === categoryId) : null;
+
     await createNotification({
-      type: "transaction",
-      title: isExpense ? "Pengeluaran baru dicatat" : "Pemasukan baru dicatat",
-      message: `${state.user?.name || "Anggota keluarga"} mencatat ${isExpense ? "pengeluaran" : "pemasukan"} ${formatCurrency(
+      type: isExpense ? "expense" : "income",
+      title: isExpense
+        ? `Pengeluaran ${formatCurrency(payload.amount)}`
+        : `Pemasukan ${formatCurrency(payload.amount)}`,
+      message: `${state.user?.name || "Anggota"} mencatat ${isExpense ? "pengeluaran" : "pemasukan"} ${formatCurrency(
         payload.amount
-      )}${isExpense && budget?.name ? ` dari alokasi ${budget.name}` : ""}${
-        projection?.overBudget ? ` dan membuat over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
-      }${sourceCheck?.isNegative ? ` (saldo dompet minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
+      )}${payload.note ? ` (${payload.note})` : ""}${isExpense && budget?.name ? ` • Alokasi: ${budget.name}` : ""}${category?.name ? ` • Kategori: ${category.name}` : ""}${targetAccount?.name ? ` • Dompet: ${targetAccount.name}` : ""}${
+        projection?.overBudget ? ` • Over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
+      }${sourceCheck?.isNegative ? ` (saldo minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
     });
 
@@ -1022,10 +1027,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
 
     await createNotification({
-      type: "transaction",
-      title: "Transaksi diperbarui",
-      message: `${state.user?.name || "Anggota keluarga"} memperbarui transaksi ${formatCurrency(payload.amount)}${
-        projection?.overBudget ? ` dan alokasi menjadi over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
+      type: isExpense ? "expense" : "income",
+      title: isExpense ? `Pengeluaran diubah: ${formatCurrency(payload.amount)}` : `Pemasukan diubah: ${formatCurrency(payload.amount)}`,
+      message: `${state.user?.name || "Anggota"} memperbarui transaksi ${formatCurrency(payload.amount)}${
+        projection?.overBudget ? ` • Over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
       }${sourceCheck?.isNegative ? ` (saldo dompet minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
     });

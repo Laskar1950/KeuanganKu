@@ -49,6 +49,7 @@ serve(async (req: Request) => {
     type?: string;
     icon?: string;
     badge?: string;
+    exclude_user_id?: string;
   } = {};
   try {
     body = await req.json();
@@ -104,7 +105,7 @@ serve(async (req: Request) => {
       .rpc("get_recent_notification_count", { p_family_id: familyId, p_seconds: 12 });
     const recentCount = typeof recentCountData === "number" ? recentCountData : Number(recentCountData) || 0;
 
-    if (type === "transaction" && recentCount > 1) {
+    if ((type === "transaction" || type === "expense" || type === "income") && recentCount > 1) {
       title = `${recentCount} transaksi baru dicatat`;
       message = `Ada ${recentCount} pencatatan baru di keluarga Anda — buka untuk detail.`;
     }
@@ -112,8 +113,7 @@ serve(async (req: Request) => {
     // ignore coalesce failure, use original
   }
 
-  // Fetch push subscriptions for this family, filtered to owner/admin only
-  // Join with family_members to ensure only managers get push
+  // Fetch push subscriptions for this family
   const { data: subs, error: subsError } = await supabase
     .from("push_subscriptions")
     .select("endpoint, p256dh, auth, expirationTime, user_id, family_id, created_at")
@@ -127,8 +127,8 @@ serve(async (req: Request) => {
     return jsonResponse({ ok: true, sent: 0, reason: "No subscriptions for family" });
   }
 
-  // Filter to owner/admin only (as per requirement)
-  // Need to fetch family_members roles for these user_ids
+  // Broadcast to all family members that have subscribed
+  // Exclude the user who performed the action if exclude_user_id is provided
   const userIds = [...new Set(subs.map((s: { user_id: string }) => s.user_id))];
   const { data: members } = await supabase
     .from("family_members")
@@ -136,14 +136,16 @@ serve(async (req: Request) => {
     .eq("family_id", familyId)
     .in("user_id", userIds);
 
-  const managerIds = new Set(
-    (members || []).filter((m: { role: string }) => ["owner", "admin"].includes(m.role)).map((m: { user_id: string }) => m.user_id)
-  );
+  const familyUserIds = new Set((members || []).map((m: { user_id: string }) => m.user_id));
 
-  const targetSubs = subs.filter((s: { user_id: string }) => managerIds.has(s.user_id));
+  const targetSubs = subs.filter((s: { user_id: string }) => {
+    if (!familyUserIds.has(s.user_id)) return false;
+    if (body.exclude_user_id && s.user_id === body.exclude_user_id) return false;
+    return true;
+  });
 
   if (targetSubs.length === 0) {
-    return jsonResponse({ ok: true, sent: 0, reason: "No manager subscriptions" });
+    return jsonResponse({ ok: true, sent: 0, reason: "No target subscriptions" });
   }
 
   // Prepare web-push
@@ -158,7 +160,9 @@ serve(async (req: Request) => {
     body: message,
     icon: body.icon || "/pwa-192x192.png",
     badge: body.badge || "/pwa-192x192.png",
-    tag: "keuanganku-transaction", // coalesce per family
+    tag: type === "transaction" || type === "expense" || type === "income"
+      ? `keuanganku-tx-${familyId}`
+      : `keuanganku-${type || "activity"}`,
     target,
     url: `/?target=${target}`,
     type,

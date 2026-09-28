@@ -71,11 +71,13 @@ export interface FamilyMember {
 export interface AppNotification {
   id: string;
   familyId?: string;
+  type?: string;
   title: string;
   message?: string;
   target?: string;
   userId?: string | null;
   readAt?: string | null;
+  createdAt?: string | null;
 }
 
 export interface SavingGoal {

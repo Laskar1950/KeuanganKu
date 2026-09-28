@@ -1,11 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Bell, Eye, EyeOff, LogOut, Moon, Palette, Settings, Sun, UserRound, Wallet } from "lucide-react";
+import {
+  Bell,
+  Check,
+  Eye,
+  EyeOff,
+  LogOut,
+  Moon,
+  Palette,
+  PiggyBank,
+  Settings,
+  Sun,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  UserRound,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { ProgressBar } from "@/components/UI";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
 import { cn } from "@/lib/utils";
-import { formatRupiah } from "@/utils/format";
+import { formatRelativeTime, formatRupiah } from "@/utils/format";
 import { getBudgetUsage } from "@/utils/calculations";
 import { getBudgetCycleTransactions, getCurrentBudgetCycle, formatBudgetCycleRange } from "@/utils/budgetCycle";
 import { getThemePreference, setThemePreference, subscribeTheme } from "@/theme";
@@ -14,6 +31,86 @@ import type { Account, AppNotification, Budget, Transaction } from "@/types";
 interface DashboardProps {
   goTo?: (tab: string) => void;
   onNavigate?: (tab: string) => void;
+}
+
+function getNotificationMeta(notification: AppNotification) {
+  const type = notification.type || "general";
+  const titleLower = (notification.title || "").toLowerCase();
+  const messageLower = (notification.message || "").toLowerCase();
+
+  if (
+    type === "expense" ||
+    (type === "transaction" && (titleLower.includes("pengeluaran") || messageLower.includes("pengeluaran")))
+  ) {
+    return {
+      type: "expense",
+      icon: TrendingDown,
+      color: "text-red bg-red-bg border-red-border",
+      badgeColor: "bg-red text-white",
+      label: "Pengeluaran",
+    };
+  }
+
+  if (
+    type === "income" ||
+    (type === "transaction" && (titleLower.includes("pemasukan") || messageLower.includes("pemasukan")))
+  ) {
+    return {
+      type: "income",
+      icon: TrendingUp,
+      color: "text-green bg-green-bg border-green-border",
+      badgeColor: "bg-green text-white",
+      label: "Pemasukan",
+    };
+  }
+
+  if (type === "budget" || titleLower.includes("anggaran") || titleLower.includes("alokasi")) {
+    return {
+      type: "budget",
+      icon: PiggyBank,
+      color: "text-violet bg-violet-bg border-line",
+      badgeColor: "bg-violet text-white",
+      label: "Anggaran",
+    };
+  }
+
+  if (type === "account" || titleLower.includes("dompet") || titleLower.includes("akun")) {
+    return {
+      type: "account",
+      icon: Wallet,
+      color: "text-blue bg-blue-bg border-line",
+      badgeColor: "bg-blue text-white",
+      label: "Dompet",
+    };
+  }
+
+  if (type === "goal" || titleLower.includes("target") || titleLower.includes("tabungan")) {
+    return {
+      type: "goal",
+      icon: Target,
+      color: "text-amber bg-amber-bg border-line",
+      badgeColor: "bg-amber text-ink",
+      label: "Target",
+    };
+  }
+
+  if (type === "member" || titleLower.includes("anggota") || messageLower.includes("anggota")) {
+    return {
+      type: "member",
+      icon: Users,
+      color: "text-rose-dark bg-rose-bg border-rose-border",
+      badgeColor: "bg-rose-strong text-white",
+      label: "Keluarga",
+    };
+  }
+
+  return {
+    type: "general",
+    icon: Bell,
+    color: "text-rose-dark bg-soft border-line",
+    badgeColor: "bg-soft text-muted-foreground",
+    label: "Aktivitas",
+  };
 }
 
 const walletGradients = [
@@ -164,6 +261,7 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
     [budgets, activeCycle.month, activeCycle.year]
   );
   const unreadNotifications = notifications.filter((item: AppNotification) => !item.readAt);
+  const isPushGranted = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
   const latestTransactions = useMemo(() => [...transactions].slice(0, 4), [transactions]);
 
   const totalBalance = accountBalances.reduce((sum: number, account: Account) => sum + Number(account.currentBalance || 0), 0);
@@ -315,19 +413,25 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
                 <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Notifikasi</p>
                 <h2 className="font-display text-lg tracking-tight text-ink">Aktivitas terbaru</h2>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={requestNotificationPermission}
-                  className="rounded-full border border-line bg-panel-strong px-3 py-2 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
-                >
-                  Aktifkan push
-                </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!isPushGranted ? (
+                  <button
+                    type="button"
+                    onClick={requestNotificationPermission}
+                    className="rounded-full border border-line bg-panel-strong px-3 py-1.5 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
+                  >
+                    Aktifkan push
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-green-border bg-green-bg px-2.5 py-1 text-[10px] font-black text-green">
+                    <Check size={11} /> Push aktif
+                  </span>
+                )}
                 {unreadNotifications.length > 0 && (
                   <button
                     type="button"
                     onClick={markAllNotificationsRead}
-                    className="rounded-full border border-line bg-panel-strong px-3 py-2 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
+                    className="rounded-full border border-line bg-panel-strong px-3 py-1.5 text-[11px] font-black text-rose-dark transition hover:bg-rose-bg"
                   >
                     Semua dibaca
                   </button>
@@ -335,24 +439,76 @@ export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
               </div>
             </div>
 
-            <div className="mt-3 grid gap-2">
+            <div className="mt-3 grid gap-2.5 max-h-[52vh] overflow-y-auto pr-0.5 [scrollbar-width:thin]">
               {notifications.length ? (
-                notifications.slice(0, 8).map((notification: AppNotification) => (
-                  <button
-                    key={notification.id}
-                    type="button"
-                    onClick={() => handleNotificationClick(notification)}
-                    className={cn(
-                      "rounded-2xl border border-line bg-soft p-3 text-left transition hover:border-line-strong hover:shadow-soft",
-                      notification.readAt && "opacity-65"
-                    )}
-                  >
-                    <strong className="mb-0.5 block text-[13px] font-black text-ink">{notification.title}</strong>
-                    <small className="text-[11px] text-muted-foreground">{notification.message || "Ada aktivitas baru."}</small>
-                  </button>
-                ))
+                notifications.slice(0, 15).map((notification: AppNotification) => {
+                  const meta = getNotificationMeta(notification);
+                  const Icon = meta.icon;
+                  const isUnread = !notification.readAt;
+
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onClick={() => handleNotificationClick(notification)}
+                      className={cn(
+                        "group relative flex items-start gap-3 rounded-2xl border p-3 text-left transition",
+                        isUnread
+                          ? "border-line-strong bg-panel-solid shadow-soft hover:border-rose-border hover:bg-panel"
+                          : "border-line/70 bg-soft/50 opacity-75 hover:opacity-100 hover:border-line hover:bg-soft"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "relative grid size-10 shrink-0 place-items-center rounded-xl border transition group-hover:scale-105",
+                          meta.color
+                        )}
+                      >
+                        <Icon size={18} />
+                        {isUnread && (
+                          <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-red ring-2 ring-panel-solid" />
+                        )}
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-0.5 flex items-center justify-between gap-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                              meta.badgeColor
+                            )}
+                          >
+                            {meta.label}
+                          </span>
+                          <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">
+                            {formatRelativeTime(notification.createdAt)}
+                          </span>
+                        </div>
+
+                        <strong
+                          className={cn(
+                            "block text-xs font-black leading-snug text-ink",
+                            isUnread ? "text-ink" : "text-ink/80"
+                          )}
+                        >
+                          {notification.title}
+                        </strong>
+
+                        {notification.message && (
+                          <p className="mt-0.5 text-[11px] font-semibold leading-relaxed text-muted-foreground line-clamp-2">
+                            {notification.message}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               ) : (
-                <p className="text-xs text-muted-foreground">Belum ada notifikasi.</p>
+                <div className="py-8 text-center text-muted-foreground">
+                  <Bell className="mx-auto mb-2 size-8 opacity-30 text-rose-dark" />
+                  <p className="text-xs font-black text-ink">Belum ada aktivitas</p>
+                  <p className="mt-0.5 text-[11px]">Semua notifikasi transaksi dan aktivitas keluarga akan muncul di sini.</p>
+                </div>
               )}
             </div>
           </section>
