@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, PlusCircle, Search, Wallet, X } from "lucide-react";
+import { Check, Search, Wallet, X } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { cn } from "@/lib/utils";
 import { formatRupiah, sanitizeNumericInput, todayKey } from "@/utils/format";
@@ -9,6 +9,12 @@ import { getBudgetCycle, getBudgetCycleTransactions, formatBudgetCycleRange } fr
 import { useDebounce } from "@/utils/useDebounce";
 import { useBodyScrollLock } from "@/utils/useBodyScrollLock";
 import { parseMBankingText, type ParsedMBanking } from "@/utils/mBankParser";
+import {
+  CategoryPickerModal,
+  CategoryTriggerButton,
+  WalletPickerModal,
+  WalletTriggerButton,
+} from "@/components/Pickers";
 import type { Account, Budget, Category, Transaction } from "@/types";
 
 interface TransactionForm {
@@ -221,6 +227,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     budgets,
     transactions,
     accountBalances,
+    familyMembers,
     currentMember,
     addTransaction,
     updateTransaction,
@@ -229,9 +236,9 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   } = useApp();
 
   const [form, setForm] = useState<TransactionForm>(emptyForm);
-  const [showCategoryForm, setShowCategoryForm] = useState(false);
-  const [quickCategoryName, setQuickCategoryName] = useState("");
-  const [savingCategory, setSavingCategory] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  const [walletFilterMode, setWalletFilterMode] = useState<"mine" | "all">("mine");
   const [allocationPickerOpen, setAllocationPickerOpen] = useState(false);
   const [allocationSearch, setAllocationSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -256,8 +263,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     } else if (open) {
       setForm(emptyForm());
     }
-    setShowCategoryForm(false);
-    setQuickCategoryName("");
+    setCategoryPickerOpen(false);
+    setWalletPickerOpen(false);
     setAllocationPickerOpen(false);
     setAllocationSearch("");
   }, [editingTransaction, open]);
@@ -275,6 +282,29 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     [categories]
   );
 
+  const selectedCategory = useMemo(
+    () => (categories as Category[]).find((cat) => cat.id === form.categoryId) || null,
+    [categories, form.categoryId]
+  );
+
+  const selectedAccount = useMemo(
+    () => (accountBalances as Account[]).find((acc) => acc.id === form.accountId) || null,
+    [accountBalances, form.accountId]
+  );
+
+  const handleAddCategory = async (name: string, catType: "expense" | "income"): Promise<Category | null> => {
+    try {
+      const category = await addCategory({ name, type: catType });
+      if (category) {
+        setForm((prev) => ({ ...prev, categoryId: category.id }));
+      }
+      return category;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Gagal menambah kategori.");
+      return null;
+    }
+  };
+
   const cycle = useMemo(() => getBudgetCycle(form.transactionDate), [form.transactionDate]);
   const monthTransactions = useMemo(
     () => getBudgetCycleTransactions(transactions, cycle.month, cycle.year).filter((trx) => trx.id !== editingTransaction?.id),
@@ -282,18 +312,6 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   );
 
   // Dompet untuk pemasukan: hanya milik sendiri + legacy shared (createdBy null) — manager bisa toggle lihat semua
-  const incomeWalletOptions = useMemo(() => {
-    const base = (accountBalances as Account[]).filter((acc) => acc.isActive);
-    return base.filter((acc) => {
-      if (acc.createdBy == null) return true; // legacy shared visible to all
-      if (acc.createdBy === currentUserId) return true;
-      if (isManager && showAllWallets) return true;
-      // allow currently selected value to remain visible when editing other's transaction
-      if (acc.id === form.accountId || acc.id === editingTransaction?.accountId) return true;
-      return false;
-    });
-  }, [accountBalances, currentUserId, isManager, showAllWallets, form.accountId, editingTransaction?.accountId]);
-
   const availableBudgets = useMemo(() => {
     if (form.type !== "expense") return [] as Budget[];
     const filtered = (budgets as Budget[])
@@ -301,9 +319,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
       .filter((budget) => {
         const acct = accountBalances.find((item: Account) => item.id === budget.accountId) as Account | undefined;
         if (!acct) return false;
-        if (acct.createdBy == null) return true; // legacy shared alokasi tampil untuk semua
+        if (showAllWallets) return true;
         if (acct.createdBy === currentUserId) return true;
-        if (isManager && showAllWallets) return true;
         // keep selected budget visible when editing
         if (budget.id === form.budgetId || budget.id === editingTransaction?.budgetId) return true;
         return false;
@@ -314,7 +331,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
         return accountA.localeCompare(accountB, "id") || a.name.localeCompare(b.name, "id");
       });
     return filtered;
-  }, [accountBalances, budgets, cycle.month, cycle.year, form.type, currentUserId, isManager, showAllWallets, form.budgetId, editingTransaction?.budgetId]);
+  }, [accountBalances, budgets, cycle.month, cycle.year, form.type, currentUserId, showAllWallets, form.budgetId, editingTransaction?.budgetId]);
 
   useEffect(() => {
     if (form.type !== "expense") {
@@ -403,23 +420,6 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     }
   }, [open]);
 
-  const submitQuickCategory = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      if (!quickCategoryName.trim()) throw new Error("Nama kategori wajib diisi.");
-      setSavingCategory(true);
-      // Buat kategori sesuai tipe transaksi yang sedang diisi
-      const category = await addCategory({ name: quickCategoryName, type: form.type });
-      setForm((prev) => ({ ...prev, categoryId: category?.id || prev.categoryId }));
-      setQuickCategoryName("");
-      setShowCategoryForm(false);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Gagal menambah kategori.");
-    } finally {
-      setSavingCategory(false);
-    }
-  };
-
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
@@ -438,7 +438,6 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
       const accountId = isExpense && selectedBudget?.accountId
         ? selectedBudget.accountId
         : form.accountId
-          || incomeWalletOptions.find((a: Account) => a.isActive)?.id
           || accountBalances.find((a: Account) => a.isActive)?.id
           || "";
 
@@ -616,82 +615,50 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
               <div className="grid gap-3">
                 {/* KATEGORI — wajib untuk expense */}
                 <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className={labelClassName}>Kategori Pengeluaran <span className="text-red">*</span></label>
-                    {canAddCategory && (
-                      <button
-                        type="button"
-                        onClick={() => setShowCategoryForm((v) => !v)}
-                        className="rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-rose-dark transition hover:bg-rose-bg"
-                      >
-                        {showCategoryForm ? "Batal" : "+ Tambah"}
-                      </button>
-                    )}
-                  </div>
-                  {showCategoryForm && canAddCategory && (
-                    <form onSubmit={submitQuickCategory} className="flex gap-2">
-                      <input
-                        value={quickCategoryName}
-                        onChange={(e) => setQuickCategoryName(e.target.value)}
-                        placeholder="Nama kategori baru"
-                        className={cn(fieldClassName, "flex-1")}
-                        autoFocus
-                      />
-                      <button
-                        type="submit"
-                        disabled={savingCategory || !quickCategoryName.trim()}
-                        className="h-12 rounded-2xl border border-white/40 px-4 text-sm font-black text-on-accent shadow-accent disabled:opacity-60 [background-image:var(--gradient-brand)]"
-                      >
-                        {savingCategory ? "..." : "Simpan"}
-                      </button>
-                    </form>
-                  )}
-                  <select
-                    value={form.categoryId}
-                    onChange={(event) => setField("categoryId", event.target.value)}
-                    className={cn(fieldClassName, "appearance-none")}
-                    required
-                  >
-                    <option value="">Pilih kategori pengeluaran</option>
-                    {expenseCategories.map((category) => (
-                      <option key={category.id} value={category.id}>{category.name}</option>
-                    ))}
-                  </select>
-                  {expenseCategories.length === 0 && (
-                    <small className="text-[11px] font-semibold text-muted-foreground">
-                      Belum ada kategori pengeluaran. Klik "+ Tambah" untuk membuat.
-                    </small>
-                  )}
+                  <label className={labelClassName}>
+                    Kategori Pengeluaran <span className="text-red">*</span>
+                  </label>
+                  <CategoryTriggerButton
+                    category={selectedCategory}
+                    placeholder="Pilih kategori pengeluaran..."
+                    onClick={() => setCategoryPickerOpen(true)}
+                  />
+                  <CategoryPickerModal
+                    open={categoryPickerOpen}
+                    title="Pilih Kategori Pengeluaran"
+                    type="expense"
+                    categories={expenseCategories}
+                    selectedCategoryId={form.categoryId}
+                    onSelect={(id) => setField("categoryId", id)}
+                    onClose={() => setCategoryPickerOpen(false)}
+                    canAddCategory={canAddCategory}
+                    onAddCategory={handleAddCategory}
+                  />
                 </div>
 
                 {/* DOMPET — wajib jika tidak ada alokasi yang dipilih */}
                 {!selectedBudget && (
                   <div className="grid gap-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <label className={labelClassName}>Dompet <span className="text-red">*</span></label>
-                      {isManager && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllWallets((v) => !v)}
-                          className={cn(
-                            "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
-                            showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
-                          )}
-                        >
-                          {showAllWallets ? "Semua" : "Milik saya"}
-                        </button>
-                      )}
-                    </div>
-                    <select
-                      value={form.accountId}
-                      onChange={(event) => setField("accountId", event.target.value)}
-                      className={cn(fieldClassName, "appearance-none")}
-                    >
-                      <option value="">Pilih dompet</option>
-                      {incomeWalletOptions.map((account) => (
-                        <option key={account.id} value={account.id}>{account.name}</option>
-                      ))}
-                    </select>
+                    <label className={labelClassName}>
+                      Dompet <span className="text-red">*</span>
+                    </label>
+                    <WalletTriggerButton
+                      account={selectedAccount}
+                      placeholder="Pilih dompet..."
+                      onClick={() => setWalletPickerOpen(true)}
+                    />
+                    <WalletPickerModal
+                      open={walletPickerOpen}
+                      title="Pilih Dompet"
+                      accounts={accountBalances}
+                      selectedAccountId={form.accountId}
+                      onSelect={(id) => setField("accountId", id)}
+                      onClose={() => setWalletPickerOpen(false)}
+                      currentUserId={currentUserId}
+                      familyMembers={familyMembers}
+                      filterMode={walletFilterMode}
+                      onFilterModeChange={setWalletFilterMode}
+                    />
                   </div>
                 )}
 
@@ -790,87 +757,51 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3">
                 <div className="grid gap-2">
-                  <label className={labelClassName}>Kategori Pemasukan</label>
-                  <select
-                    value={form.categoryId}
-                    onChange={(event) => setField("categoryId", event.target.value)}
-                    className={cn(fieldClassName, "appearance-none")}
-                  >
-                    <option value="">Pilih</option>
-                    {incomeCategories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  {canAddCategory && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCategoryForm((value) => !value)}
-                      className="inline-flex items-center gap-1 bg-transparent text-[11px] font-black text-rose-dark transition hover:opacity-80"
-                    >
-                      <PlusCircle size={14} /> Tambah kategori pemasukan
-                    </button>
-                  )}
+                  <label className={labelClassName}>
+                    Kategori Pemasukan <span className="text-red">*</span>
+                  </label>
+                  <CategoryTriggerButton
+                    category={selectedCategory}
+                    placeholder="Pilih kategori pemasukan..."
+                    onClick={() => setCategoryPickerOpen(true)}
+                  />
+                  <CategoryPickerModal
+                    open={categoryPickerOpen}
+                    title="Pilih Kategori Pemasukan"
+                    type="income"
+                    categories={incomeCategories}
+                    selectedCategoryId={form.categoryId}
+                    onSelect={(id) => setField("categoryId", id)}
+                    onClose={() => setCategoryPickerOpen(false)}
+                    canAddCategory={canAddCategory}
+                    onAddCategory={handleAddCategory}
+                  />
                 </div>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className={labelClassName}>Dompet Tujuan</label>
-                    {isManager && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllWallets((v) => !v)}
-                        className={cn(
-                          "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
-                          showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
-                        )}
-                      >
-                        {showAllWallets ? "Semua dompet" : "Dompet saya"}
-                      </button>
-                    )}
-                  </div>
-                  <select
-                    value={form.accountId}
-                    onChange={(event) => setField("accountId", event.target.value)}
-                    className={cn(fieldClassName, "appearance-none")}
-                  >
-                    <option value="">Pilih</option>
-                    {incomeWalletOptions.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                  {incomeWalletOptions.length === 0 && (
-                    <small className="text-[11px] font-semibold text-muted-foreground">
-                      Belum ada dompet milik Anda. Buat dompet di Pengaturan → Dompet Keluarga.
-                    </small>
-                  )}
-                  {!isManager && incomeWalletOptions.length > 0 && (
-                    <small className="text-[10px] font-semibold text-muted-foreground">Hanya dompet milik Anda yang tampil</small>
-                  )}
-                </div>
-              </div>
-            )}
 
-            {showCategoryForm && form.type === "income" && (
-              <div className="flex gap-2">
-                <input
-                  value={quickCategoryName}
-                  onChange={(event) => setQuickCategoryName(event.target.value)}
-                  placeholder="Contoh: Bonus Project"
-                  className={fieldClassName}
-                />
-                <button
-                  type="button"
-                  disabled={savingCategory}
-                  onClick={(event) => submitQuickCategory(event as unknown as FormEvent<HTMLFormElement>)}
-                  className="shrink-0 rounded-2xl border border-line bg-panel-strong px-4 text-xs font-black text-rose-dark transition hover:bg-rose-bg disabled:opacity-60"
-                >
-                  {savingCategory ? "Menyimpan..." : "Simpan"}
-                </button>
+                <div className="grid gap-2">
+                  <label className={labelClassName}>
+                    Dompet Tujuan <span className="text-red">*</span>
+                  </label>
+                  <WalletTriggerButton
+                    account={selectedAccount}
+                    placeholder="Pilih dompet tujuan..."
+                    onClick={() => setWalletPickerOpen(true)}
+                  />
+                  <WalletPickerModal
+                    open={walletPickerOpen}
+                    title="Pilih Dompet Tujuan"
+                    accounts={accountBalances}
+                    selectedAccountId={form.accountId}
+                    onSelect={(id) => setField("accountId", id)}
+                    onClose={() => setWalletPickerOpen(false)}
+                    currentUserId={currentUserId}
+                    familyMembers={familyMembers}
+                    filterMode={walletFilterMode}
+                    onFilterModeChange={setWalletFilterMode}
+                  />
+                </div>
               </div>
             )}
 

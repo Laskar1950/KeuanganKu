@@ -34,10 +34,10 @@ function extractAmount(text: string): number | null {
   // Try multiple patterns: Rp 50.000, Rp50,000, Rp 1.250.000, IDR 50000, Rp. 50.000, etc.
   // Prioritize Rp ... patterns
   const patterns = [
-    /Rp\.?\s*([\d\.,]+)/i, // Rp 50.000 or Rp. 50,000
-    /IDR\s*([\d\.,]+)/i,
-    /nominal\s*[:\-]?\s*Rp?\.?\s*([\d\.,]+)/i,
-    /amount\s*[:\-]?\s*Rp?\.?\s*([\d\.,]+)/i,
+    /Rp\.?\s*([\d.,]+)/i, // Rp 50.000 or Rp. 50,000
+    /IDR\s*([\d.,]+)/i,
+    /nominal\s*[:-]?\s*Rp?\.?\s*([\d.,]+)/i,
+    /amount\s*[:-]?\s*Rp?\.?\s*([\d.,]+)/i,
   ];
 
   for (const pat of patterns) {

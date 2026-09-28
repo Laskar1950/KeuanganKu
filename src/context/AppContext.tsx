@@ -78,6 +78,7 @@ export interface AccountPayload {
   name: string;
   type?: string;
   initialBalance?: number | string;
+  createdBy?: string | null;
 }
 
 export interface OnboardingPayload {
@@ -1171,7 +1172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       type: payload.type || "cash",
       initial_balance: Number(payload.initialBalance || 0),
       is_active: true,
-      created_by: state.user!.id,
+      created_by: payload.createdBy !== undefined ? payload.createdBy : state.user!.id,
     });
     if (error) throw error;
 
@@ -1190,9 +1191,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     assertOwnerOrAdmin(currentMember);
     if (!payload.name) throw new Error("Nama akun/dompet wajib diisi.");
 
+    const updateData: Record<string, unknown> = {
+      name: payload.name,
+      type: payload.type || "cash",
+      initial_balance: Number(payload.initialBalance || 0),
+    };
+    if (payload.createdBy !== undefined) {
+      updateData.created_by = payload.createdBy;
+    }
+
     const { error } = await supabase
       .from("accounts")
-      .update({ name: payload.name, type: payload.type || "cash", initial_balance: Number(payload.initialBalance || 0) })
+      .update(updateData)
       .eq("id", id)
       .eq("family_id", state.household!.id);
     if (error) throw error;

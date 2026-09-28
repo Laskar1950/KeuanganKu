@@ -1,8 +1,6 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-type MonthLabel = { value: number; label: string };
-
 function formatCurrencyExcel(value: number): number {
   return Number(value || 0);
 }
@@ -19,7 +17,7 @@ function toDisplayDate(date: Date): string {
 }
 
 function sanitizeSheetName(name: string): string {
-  return name.replace(/[\\/*?:\[\]]/g, "_").slice(0, 31);
+  return name.replace(/[\\/*?:[\]]/g, "_").slice(0, 31);
 }
 
 // Palette — calm professional (UI UX Pro Max + Taste)
@@ -63,13 +61,6 @@ function thinBorder(color = C.line): Partial<ExcelJS.Borders> {
 function headerStyle(cell: ExcelJS.Cell, bg: string = C.rose, color: string = "FFFFFFFF") {
   cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: color } };
   cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
-  cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-  cell.border = thinBorder();
-}
-
-function subHeaderStyle(cell: ExcelJS.Cell) {
-  cell.font = { name: "Calibri", size: 10, bold: true, color: { argb: C.ink } };
-  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.soft } };
   cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   cell.border = thinBorder();
 }

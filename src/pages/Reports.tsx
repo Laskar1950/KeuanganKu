@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Download, Filter, Loader2 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
-import { DonutChart, TrendBars, type Granularity, getExpenseIncomeStatus } from "@/components/ReportCharts";
+import { DonutChart, TrendBars, type Granularity } from "@/components/ReportCharts";
 import ReportFilterSheet from "@/components/ReportFilterSheet";
 import {
   dummyAccounts,
@@ -19,7 +19,7 @@ import {
   getCurrentBudgetCycle,
   isDateInBudgetCycle,
 } from "@/utils/budgetCycle";
-import { getExpenseByCategory } from "@/utils/calculations";
+import { getExpenseByCategory, getExpenseIncomeStatus } from "@/utils/calculations";
 import { useTrendPeriods, useBalancePoints } from "@/hooks/useTrend";
 import type { Account, Budget, Category, FamilyMember, SavingGoal, Transaction } from "@/types";
 

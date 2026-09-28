@@ -13,6 +13,12 @@ import {
   getBudgetCycleTransactions,
   getCurrentBudgetCycle,
 } from "@/utils/budgetCycle";
+import {
+  CategoryPickerModal,
+  CategoryTriggerButton,
+  WalletPickerModal,
+  WalletTriggerButton,
+} from "@/components/Pickers";
 import type { Account, Budget, Category, Transaction } from "@/types";
 
 interface BudgetForm {
@@ -69,10 +75,12 @@ export default function Budgets() {
     transactions,
     accountBalances,
     categories,
+    familyMembers,
     currentMember,
     addBudget,
     updateBudget,
     deleteBudget: deleteBudgetFromContext,
+    addCategory,
     notify,
   } = useApp();
 
@@ -80,15 +88,16 @@ export default function Budgets() {
   const [selectedCycle, setSelectedCycle] = useState({ month: Number(initialCycle.month), year: Number(initialCycle.year) });
   const [form, setForm] = useState<BudgetForm>(() => createEmptyBudgetForm(initialCycle));
   const [formOpen, setFormOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  const [walletFilterMode, setWalletFilterMode] = useState<"mine" | "all">("mine");
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [detailBudget, setDetailBudget] = useState<Budget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Budget | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showAllWallets, setShowAllWallets] = useState(false);
 
   const canManageBudget = ["owner", "admin"].includes(currentMember?.role);
-  const isManager = ["owner", "admin"].includes(currentMember?.role || "");
   const currentUserId = user?.id || "";
   const cycleRange = formatBudgetCycleRange(selectedCycle.month, selectedCycle.year);
   const cycleTransactions = useMemo(
@@ -106,21 +115,33 @@ export default function Budgets() {
     [budgets, selectedCycle.month, selectedCycle.year]
   );
 
-  const budgetWalletOptions = useMemo(() => {
-    const base = (accountBalances as Account[]).filter((a) => a.isActive !== false);
-    return base.filter((acc) => {
-      if ((acc as Account & { createdBy?: string | null }).createdBy == null) return true;
-      if ((acc as Account & { createdBy?: string | null }).createdBy === currentUserId) return true;
-      if (isManager && showAllWallets) return true;
-      if (acc.id === form.accountId) return true;
-      return false;
-    });
-  }, [accountBalances, currentUserId, isManager, showAllWallets, form.accountId]);
-
   const expenseCategories = useMemo(
     () => (categories as Category[]).filter((c) => c.type === "expense"),
     [categories]
   );
+
+  const selectedCategory = useMemo(
+    () => (categories as Category[]).find((c) => c.id === form.categoryId) || null,
+    [categories, form.categoryId]
+  );
+
+  const selectedAccount = useMemo(
+    () => (accountBalances as Account[]).find((a) => a.id === form.accountId) || null,
+    [accountBalances, form.accountId]
+  );
+
+  const handleAddCategory = async (name: string, type: "expense" | "income"): Promise<Category | null> => {
+    try {
+      const created = await addCategory({ name, type });
+      if (created) {
+        setForm((prev) => ({ ...prev, categoryId: created.id }));
+      }
+      return created;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Gagal menambah kategori.");
+      return null;
+    }
+  };
 
   const totals = filteredBudgets.reduce(
     (acc, budget) => {
@@ -143,12 +164,16 @@ export default function Budgets() {
   const openCreateForm = () => {
     setEditingBudget(null);
     setForm(createEmptyBudgetForm(selectedCycle));
+    setCategoryPickerOpen(false);
+    setWalletPickerOpen(false);
     setFormOpen(true);
   };
 
   const closeForm = () => {
     setEditingBudget(null);
     setForm(createEmptyBudgetForm(selectedCycle));
+    setCategoryPickerOpen(false);
+    setWalletPickerOpen(false);
     setFormOpen(false);
   };
 
@@ -364,75 +389,63 @@ export default function Budgets() {
             </div>
 
             <div className="grid gap-2">
-              <label className={labelClassName}>Kategori pengeluaran <span className="text-red">*</span></label>
-              <select
-                value={form.categoryId}
-                onChange={(event) => setField("categoryId", event.target.value)}
-                className={cn(fieldClassName, "appearance-none")}
-                required
-              >
-                <option value="">Pilih kategori</option>
-                {expenseCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-              {expenseCategories.length === 0 && (
-                <small className="text-[11px] font-semibold text-muted-foreground">
-                  Belum ada kategori pengeluaran. Buat dulu di Pengaturan → Kategori.
-                </small>
-              )}
+              <label className={labelClassName}>
+                Kategori Pengeluaran <span className="text-red">*</span>
+              </label>
+              <CategoryTriggerButton
+                category={selectedCategory}
+                placeholder="Pilih kategori pengeluaran..."
+                onClick={() => setCategoryPickerOpen(true)}
+              />
+              <CategoryPickerModal
+                open={categoryPickerOpen}
+                title="Pilih Kategori Pengeluaran"
+                type="expense"
+                categories={expenseCategories}
+                selectedCategoryId={form.categoryId}
+                onSelect={(id) => setField("categoryId", id)}
+                onClose={() => setCategoryPickerOpen(false)}
+                canAddCategory={canManageBudget}
+                onAddCategory={handleAddCategory}
+              />
               <small className="text-[11px] font-semibold text-muted-foreground">
                 Satu kategori hanya boleh memiliki satu alokasi per periode bulan.
               </small>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <label className={labelClassName}>Nominal</label>
-                <input
-                  inputMode="numeric"
-                  type="text"
-                  value={form.amount}
-                  onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
-                  placeholder="Contoh: 1000000"
-                  className={fieldClassName}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className={labelClassName}>Sumber dompet</label>
-                  {isManager && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllWallets((v) => !v)}
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
-                        showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
-                      )}
-                    >
-                      {showAllWallets ? "Semua" : "Milik saya"}
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={form.accountId}
-                  onChange={(event) => setField("accountId", event.target.value)}
-                  className={cn(fieldClassName, "appearance-none")}
-                >
-                  <option value="">Pilih dompet</option>
-                  {budgetWalletOptions.map((account) => (
-                    <option value={account.id} key={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-                {budgetWalletOptions.length === 0 && (
-                  <small className="text-[11px] font-semibold text-muted-foreground">Belum ada dompet milik Anda. Buat di Pengaturan → Dompet.</small>
-                )}
-                {!isManager && budgetWalletOptions.length > 0 && (
-                  <small className="text-[10px] font-semibold text-muted-foreground">Hanya dompet milik Anda</small>
-                )}
-              </div>
+            <div className="grid gap-2">
+              <label className={labelClassName}>
+                Sumber Dompet <span className="text-red">*</span>
+              </label>
+              <WalletTriggerButton
+                account={selectedAccount}
+                placeholder="Pilih sumber dompet..."
+                onClick={() => setWalletPickerOpen(true)}
+              />
+              <WalletPickerModal
+                open={walletPickerOpen}
+                title="Pilih Sumber Dompet"
+                accounts={accountBalances}
+                selectedAccountId={form.accountId}
+                onSelect={(id) => setField("accountId", id)}
+                onClose={() => setWalletPickerOpen(false)}
+                currentUserId={currentUserId}
+                familyMembers={familyMembers}
+                filterMode={walletFilterMode}
+                onFilterModeChange={setWalletFilterMode}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className={labelClassName}>Nominal</label>
+              <input
+                inputMode="numeric"
+                type="text"
+                value={form.amount}
+                onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
+                placeholder="Contoh: 1000000"
+                className={fieldClassName}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

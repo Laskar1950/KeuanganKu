@@ -147,3 +147,21 @@ export function getCategoryTotalExpense(categoryId: string, transactions: Transa
 export function makeId(prefix = "id"): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+
+export function getExpenseIncomeStatus(income: number, expense: number): { label: string; tone: "surplus" | "balanced" | "deficit"; description: string } {
+  const inc = Number(income || 0);
+  const exp = Number(expense || 0);
+  if (inc === 0 && exp === 0) return { label: "Belum Ada Aktivitas", tone: "balanced", description: "Belum ada pencatatan pada periode ini" };
+  if (inc === 0 && exp > 0) return { label: "Defisit Penuh", tone: "deficit", description: "Tidak ada pemasukan, hanya pengeluaran" };
+  if (exp === 0 && inc > 0) return { label: "Surplus Maksimal", tone: "surplus", description: "Tidak ada pengeluaran, pemasukan utuh" };
+  const diff = Math.abs(inc - exp);
+  const max = Math.max(inc, exp);
+  const ratio = diff / max;
+  if (ratio < 0.1) return { label: "Seimbang", tone: "balanced", description: "Pemasukan dan pengeluaran relatif seimbang" };
+  if (exp > inc) {
+    if (exp > inc * 1.5) return { label: "Defisit Signifikan", tone: "deficit", description: "Pengeluaran jauh melampaui pemasukan" };
+    return { label: "Defisit", tone: "deficit", description: "Pengeluaran melebihi pemasukan" };
+  }
+  if (exp < inc * 0.5) return { label: "Surplus Signifikan", tone: "surplus", description: "Pemasukan jauh melampaui pengeluaran" };
+  return { label: "Surplus", tone: "surplus", description: "Pemasukan lebih besar dari pengeluaran" };
+}

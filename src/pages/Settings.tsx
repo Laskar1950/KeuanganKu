@@ -57,7 +57,7 @@ const accountTypeLabel: Record<string, string> = {
   saving: "Tabungan",
   other: "Lainnya",
 };
-const emptyAccountForm = { name: "", type: "cash", initialBalance: "" as string | number };
+const emptyAccountForm = { name: "", type: "cash", initialBalance: "" as string | number, createdBy: "" };
 const emptyMemberForm = { identifier: "", role: "member" };
 
 const roleAccessRows = [
@@ -607,11 +607,17 @@ export default function Settings({ view = "menu" }: SettingsProps) {
   const submitAccount = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
+      const payload = {
+        name: accountForm.name,
+        type: accountForm.type,
+        initialBalance: accountForm.initialBalance,
+        createdBy: accountForm.createdBy ? accountForm.createdBy : null,
+      };
       if (editingAccountId) {
-        await updateAccount(editingAccountId, accountForm);
+        await updateAccount(editingAccountId, payload);
         setEditingAccountId(null);
       } else {
-        await addAccount(accountForm);
+        await addAccount(payload);
       }
       setAccountForm(emptyAccountForm);
     } catch (error) {
@@ -621,7 +627,12 @@ export default function Settings({ view = "menu" }: SettingsProps) {
 
   const startEditAccount = (account: Account) => {
     setEditingAccountId(account.id);
-    setAccountForm({ name: account.name, type: account.type, initialBalance: String(account.initialBalance || 0) });
+    setAccountForm({
+      name: account.name,
+      type: account.type,
+      initialBalance: String(account.initialBalance || 0),
+      createdBy: (account as Account & { createdBy?: string | null }).createdBy || "",
+    });
   };
 
   const cancelEditAccount = () => {
@@ -1665,6 +1676,24 @@ export default function Settings({ view = "menu" }: SettingsProps) {
                   </small>
                 )}
               </div>
+            </div>
+            <div className="grid gap-2">
+              <label className={labelClassName}>Pemilik Dompet</label>
+              <select
+                value={accountForm.createdBy}
+                onChange={(event) => setAccountForm({ ...accountForm, createdBy: event.target.value })}
+                className={cn(fieldClassName, "appearance-none")}
+              >
+                <option value="">Dompet Bersama (Semua Anggota)</option>
+                {(familyMembers as FamilyMember[]).map((member) => (
+                  <option value={member.userId} key={member.id}>
+                    {member.profile?.name || member.profile?.email || "Anggota"} {member.userId === user?.id ? "(Anda)" : ""}
+                  </option>
+                ))}
+              </select>
+              <small className="text-[10.5px] font-semibold text-muted-foreground">
+                Dompet bersama dapat diakses semua anggota. Jika disetel ke anggota tertentu, dompet akan masuk ke filter &quot;Dompet Saya&quot; anggota tersebut.
+              </small>
             </div>
             <button type="submit" className={secondaryButtonClassName}>
               {editingAccountId ? "Simpan Perubahan Dompet" : "Tambah Akun/Dompet"}
