@@ -28,8 +28,7 @@ interface TransactionListProps {
 function getTransactionTitle(trx: Transaction, category?: Category, budget?: Budget) {
   const note = trx.note?.trim();
   if (note) return note;
-  if (trx.type === "expense" && budget?.name) return budget.name;
-  return category?.name || (trx.type === "income" ? "Pemasukan" : "Pengeluaran");
+  return category?.name || budget?.name || (trx.type === "income" ? "Pemasukan" : "Pengeluaran");
 }
 
 export default function TransactionList({
@@ -63,7 +62,7 @@ export default function TransactionList({
         const isIncome = trx.type === "income";
         const title = getTransactionTitle(trx, category, budget);
         const creatorName = trx.createdByProfile?.name || "Anggota keluarga";
-        const transactionGroup = isIncome ? category?.name || "Pemasukan" : budget?.name || "Tanpa Alokasi";
+        const transactionGroup = isIncome ? category?.name || "Pemasukan" : category?.name || budget?.name || "Pengeluaran";
         const allowEdit = Boolean(onEdit) && (typeof canEdit === "function" ? canEdit(trx) : true);
         const allowDelete = Boolean(onDelete) && (typeof canDelete === "function" ? canDelete(trx) : true);
 

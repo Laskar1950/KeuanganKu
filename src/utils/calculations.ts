@@ -120,9 +120,13 @@ export interface BudgetUsage {
  * sebagai insight tambahan — tapi itu disimpan terpisah di usedUnallocated.
  */
 export function getBudgetUsage(budget: Budget, transactions: Transaction[]): BudgetUsage {
-  // Transaksi yang secara langsung dikaitkan ke alokasi ini
   const used = transactions
-    .filter((trx) => trx.type === "expense" && trx.budgetId === budget.id)
+    .filter((trx) => {
+      if (trx.type !== "expense") return false;
+      if (budget.categoryId && trx.categoryId === budget.categoryId) return true;
+      if (trx.budgetId === budget.id) return true;
+      return false;
+    })
     .reduce((total, trx) => total + Number(trx.amount || 0), 0);
 
   const percentage = budget.amount > 0 ? Math.round((used / budget.amount) * 100) : 0;

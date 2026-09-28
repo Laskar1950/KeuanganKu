@@ -1,6 +1,21 @@
 import { useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronDown, Edit3, PiggyBank, Plus, Sparkles, Trash2, Wallet, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CalendarDays,
+  ChevronDown,
+  Copy,
+  Edit3,
+  PiggyBank,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+  Trash2,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import FinanceDetailModal from "@/components/FinanceDetailModal";
@@ -10,8 +25,10 @@ import { getBudgetUsage } from "@/utils/calculations";
 import {
   formatBudgetCycleLabel,
   formatBudgetCycleRange,
+  getBudgetCycleRange,
   getBudgetCycleTransactions,
   getCurrentBudgetCycle,
+  isDateInBudgetCycle,
 } from "@/utils/budgetCycle";
 import {
   CategoryPickerModal,
@@ -159,6 +176,138 @@ export default function Budgets() {
   const totalProgress = Math.min(100, totalProgressRaw);
   const totalTone = getProgressTone(totalProgressRaw, totals.overBudget > 0);
 
+  const [statusFilter, setStatusFilter] = useState<"all" | "attention" | "safe">("all");
+  const [copying, setCopying] = useState(false);
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const activeCycleRangeObj = useMemo(
+    () => getBudgetCycleRange(selectedCycle.month, selectedCycle.year),
+    [selectedCycle.month, selectedCycle.year]
+  );
+
+  const isCurrentCycle = useMemo(() => {
+    return isDateInBudgetCycle(today, selectedCycle.month, selectedCycle.year);
+  }, [today, selectedCycle.month, selectedCycle.year]);
+
+  const daysLeftInCycle = useMemo(() => {
+    const end = new Date(activeCycleRangeObj.endDate);
+    end.setHours(0, 0, 0, 0);
+    return Math.max(1, Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  }, [activeCycleRangeObj.endDate, today]);
+
+  const prevCycle = useMemo(() => {
+    return selectedCycle.month === 1
+      ? { month: 12, year: selectedCycle.year - 1 }
+      : { month: selectedCycle.month - 1, year: selectedCycle.year };
+  }, [selectedCycle.month, selectedCycle.year]);
+
+  const prevCycleBudgets = useMemo(() => {
+    return (budgets as Budget[]).filter(
+      (b) => Number(b.month) === prevCycle.month && Number(b.year) === prevCycle.year
+    );
+  }, [budgets, prevCycle.month, prevCycle.year]);
+
+  const copiableBudgets = useMemo(() => {
+    const currentCategoryIds = new Set(filteredBudgets.map((b) => b.categoryId).filter(Boolean));
+    return prevCycleBudgets.filter((b) => b.categoryId && !currentCategoryIds.has(b.categoryId));
+  }, [filteredBudgets, prevCycleBudgets]);
+
+  const handleCopyFromPrevious = async () => {
+    if (!canManageBudget || !copiableBudgets.length || copying) return;
+    try {
+      setCopying(true);
+      const fallbackAccountId = (accountBalances as Account[]).find((a) => a.isActive)?.id || "";
+      let copiedCount = 0;
+      for (const b of copiableBudgets) {
+        await addBudget({
+          name: b.name,
+          amount: b.amount,
+          accountId: b.accountId || fallbackAccountId,
+          categoryId: b.categoryId,
+          month: selectedCycle.month,
+          year: selectedCycle.year,
+          note: b.note || "",
+        });
+        copiedCount += 1;
+      }
+      notify(`Berhasil menyalin ${copiedCount} anggaran dari periode sebelumnya.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Gagal menyalin anggaran.");
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const unbudgetedExpenses = useMemo(() => {
+    const budgetedCategoryIds = new Set(filteredBudgets.map((b) => b.categoryId).filter(Boolean));
+    const map = new Map<string, { categoryId: string; name: string; total: number; count: number }>();
+
+    cycleTransactions.forEach((trx) => {
+      if (trx.type !== "expense") return;
+      const catId = trx.categoryId;
+      if (catId && !budgetedCategoryIds.has(catId)) {
+        const cat = (categories as Category[]).find((c) => c.id === catId);
+        const current = map.get(catId) || {
+          categoryId: catId,
+          name: cat?.name || "Kategori Lain",
+          total: 0,
+          count: 0,
+        };
+        current.total += Number(trx.amount || 0);
+        current.count += 1;
+        map.set(catId, current);
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [cycleTransactions, filteredBudgets, categories]);
+
+  const totalUnbudgeted = useMemo(() => {
+    return unbudgetedExpenses.reduce((sum, item) => sum + item.total, 0);
+  }, [unbudgetedExpenses]);
+
+  const openCreateForCategory = (catId: string, suggestedAmount?: number) => {
+    const cat = (categories as Category[]).find((c) => c.id === catId);
+    setEditingBudget(null);
+    setForm({
+      name: cat?.name || "",
+      amount: suggestedAmount ? String(suggestedAmount) : "",
+      accountId: (accountBalances as Account[]).find((a) => a.isActive)?.id || "",
+      categoryId: catId,
+      month: Number(selectedCycle.month),
+      year: Number(selectedCycle.year),
+      note: "",
+    });
+    setCategoryPickerOpen(false);
+    setWalletPickerOpen(false);
+    setFormOpen(true);
+  };
+
+  const statusCounts = useMemo(() => {
+    let attention = 0;
+    let safe = 0;
+    filteredBudgets.forEach((b) => {
+      const meta = getUsageMeta(b, cycleTransactions);
+      if (meta.overBudget || meta.progressRaw >= 80) attention += 1;
+      else safe += 1;
+    });
+    return { all: filteredBudgets.length, attention, safe };
+  }, [filteredBudgets, cycleTransactions]);
+
+  const displayedBudgets = useMemo(() => {
+    if (statusFilter === "all") return filteredBudgets;
+    return filteredBudgets.filter((b) => {
+      const meta = getUsageMeta(b, cycleTransactions);
+      if (statusFilter === "attention") return meta.overBudget || meta.progressRaw >= 80;
+      return !meta.overBudget && meta.progressRaw < 80;
+    });
+  }, [filteredBudgets, statusFilter, cycleTransactions]);
+
   const setField = (key: keyof BudgetForm, value: string | number) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const openCreateForm = () => {
@@ -188,16 +337,17 @@ export default function Budgets() {
     if (submitting) return;
     try {
       setSubmitting(true);
-      if (!canManageBudget) throw new Error("Hanya owner atau admin yang bisa mengelola alokasi.");
-      if (!form.name.trim()) throw new Error("Nama alokasi wajib diisi.");
+      if (!canManageBudget) throw new Error("Hanya owner atau admin yang bisa mengelola anggaran.");
       if (!form.categoryId) throw new Error("Kategori pengeluaran wajib dipilih.");
-      if (!form.accountId) throw new Error("Sumber dompet wajib dipilih.");
-      if (Number(form.amount || 0) <= 0) throw new Error("Nominal alokasi harus lebih dari 0.");
+      if (Number(form.amount || 0) <= 0) throw new Error("Nominal anggaran harus lebih dari 0.");
+
+      const fallbackAccountId = (accountBalances as Account[]).find((a) => a.isActive)?.id || "";
+      const accountId = form.accountId || fallbackAccountId;
 
       const payload = {
-        name: form.name.trim(),
+        name: form.name.trim() || selectedCategory?.name || "Anggaran",
         amount: Number(form.amount || 0),
-        accountId: form.accountId,
+        accountId,
         categoryId: form.categoryId,
         month: Number(form.month),
         year: Number(form.year),
@@ -254,8 +404,8 @@ export default function Budgets() {
     if (!deleteTarget) return "";
     const { usage } = getUsageMeta(deleteTarget, cycleTransactions);
     return usage.used > 0
-      ? `Alokasi "${deleteTarget.name}" sudah memiliki pengeluaran ${formatRupiah(usage.used)}. Tetap hapus?`
-      : `Hapus alokasi "${deleteTarget.name}"?`;
+      ? `Anggaran "${deleteTarget.name}" sudah memiliki pengeluaran ${formatRupiah(usage.used)}. Tetap hapus?`
+      : `Hapus anggaran "${deleteTarget.name}"?`;
   })();
 
   return (
@@ -266,9 +416,9 @@ export default function Budgets() {
         transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
         className="px-0.5"
       >
-        <p className="text-xs font-extrabold text-muted-foreground">Alokasi Anggaran</p>
+        <p className="text-xs font-extrabold text-muted-foreground">Anggaran Belanja</p>
         <h1 className="font-display text-[clamp(22px,6.4vw,28px)] leading-tight tracking-tight text-ink">Anggaran keluarga</h1>
-        <small className="text-[11px] text-muted-foreground">Anggaran otomatis mengikuti siklus gajian: reset setiap tanggal 25.</small>
+        <small className="text-[11px] text-muted-foreground">Batas maksimal belanja per kategori untuk periode gajian (tgl 25–24).</small>
       </motion.header>
 
       <section className="grid gap-4 rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 shadow-soft backdrop-blur-xl">
@@ -312,7 +462,7 @@ export default function Budgets() {
 
         <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-[20px] border border-line bg-soft p-3">
-            <span className="block text-[10px] font-extrabold text-muted-foreground">Total alokasi</span>
+            <span className="block text-[10px] font-extrabold text-muted-foreground">Total anggaran</span>
             <strong className="text-[13px] font-black text-ink">{formatRupiah(totals.total)}</strong>
           </div>
           <div className="rounded-[20px] border border-line bg-soft p-3">
@@ -348,7 +498,7 @@ export default function Budgets() {
             />
           </div>
           <small className="text-[11px] font-semibold text-muted-foreground">
-            {totalProgressRaw}% terpakai · {totals.overBudget > 0 ? "ada alokasi melewati anggaran" : "masih dalam batas anggaran"}
+            {totalProgressRaw}% terpakai · {totals.overBudget > 0 ? "ada kategori melewati batas anggaran" : "masih dalam batas aman anggaran"}
           </small>
         </div>
       </section>
@@ -358,10 +508,10 @@ export default function Budgets() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">
-                {editingBudget ? "Edit alokasi" : "Alokasi baru"}
+                {editingBudget ? "Edit Anggaran" : "Anggaran Baru"}
               </p>
               <h2 className="font-display text-lg tracking-tight text-ink">
-                {editingBudget ? editingBudget.name : "Tambah alokasi"}
+                {editingBudget ? editingBudget.name : "Tambah Anggaran Kategori"}
               </h2>
               <small className="text-[11px] text-muted-foreground">
                 Periode form: {formatBudgetCycleRange(form.month, form.year)}
@@ -378,16 +528,6 @@ export default function Budgets() {
           </div>
 
           <form className="grid gap-3" onSubmit={submitBudget}>
-            <div className="grid gap-2">
-              <label className={labelClassName}>Nama alokasi</label>
-              <input
-                value={form.name}
-                onChange={(event) => setField("name", event.target.value)}
-                placeholder="Contoh: Belanja rumah"
-                className={fieldClassName}
-              />
-            </div>
-
             <div className="grid gap-2">
               <label className={labelClassName}>
                 Kategori Pengeluaran <span className="text-red">*</span>
@@ -409,22 +549,44 @@ export default function Budgets() {
                 onAddCategory={handleAddCategory}
               />
               <small className="text-[11px] font-semibold text-muted-foreground">
-                Satu kategori hanya boleh memiliki satu alokasi per periode bulan.
+                Satu kategori hanya boleh memiliki satu alokasi anggaran per bulan.
               </small>
             </div>
 
             <div className="grid gap-2">
+              <label className={labelClassName}>Nama Anggaran</label>
+              <input
+                value={form.name}
+                onChange={(event) => setField("name", event.target.value)}
+                placeholder={selectedCategory ? `Contoh: ${selectedCategory.name}` : "Otomatis nama kategori jika kosong"}
+                className={fieldClassName}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className={labelClassName}>Nominal Batas Anggaran <span className="text-red">*</span></label>
+              <input
+                inputMode="numeric"
+                type="text"
+                value={form.amount}
+                onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
+                placeholder="Contoh: 1000000"
+                className={fieldClassName}
+              />
+            </div>
+
+            <div className="grid gap-2">
               <label className={labelClassName}>
-                Sumber Dompet <span className="text-red">*</span>
+                Dompet Acuan <span className="text-[10.5px] font-normal text-muted-foreground">(Opsional)</span>
               </label>
               <WalletTriggerButton
                 account={selectedAccount}
-                placeholder="Pilih sumber dompet..."
+                placeholder="Pilih dompet acuan (opsional)..."
                 onClick={() => setWalletPickerOpen(true)}
               />
               <WalletPickerModal
                 open={walletPickerOpen}
-                title="Pilih Sumber Dompet"
+                title="Pilih Dompet Acuan"
                 accounts={accountBalances}
                 selectedAccountId={form.accountId}
                 onSelect={(id) => setField("accountId", id)}
@@ -434,18 +596,9 @@ export default function Budgets() {
                 filterMode={walletFilterMode}
                 onFilterModeChange={setWalletFilterMode}
               />
-            </div>
-
-            <div className="grid gap-2">
-              <label className={labelClassName}>Nominal</label>
-              <input
-                inputMode="numeric"
-                type="text"
-                value={form.amount}
-                onChange={(event) => setField("amount", sanitizeNumericInput(event.target.value))}
-                placeholder="Contoh: 1000000"
-                className={fieldClassName}
-              />
+              <small className="text-[10.5px] font-semibold text-muted-foreground">
+                Pengeluaran kategori ini dari dompet manapun akan otomatis memotong anggaran.
+              </small>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -497,25 +650,146 @@ export default function Budgets() {
                 disabled={submitting}
                 className="h-12 flex-1 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 disabled:opacity-60 [background-image:var(--gradient-brand)]"
               >
-                {submitting ? "Menyimpan..." : editingBudget ? "Simpan Perubahan" : "Simpan Alokasi"}
+                {submitting ? "Menyimpan..." : editingBudget ? "Simpan Perubahan" : "Simpan Anggaran"}
               </button>
             </div>
           </form>
         </section>
       )}
 
-      <section className="grid gap-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Daftar Alokasi</p>
-            <h2 className="font-display text-lg tracking-tight text-ink">{filteredBudgets.length} alokasi</h2>
+      {/* Smart Action 1: Salin Anggaran dari Periode Lalu */}
+      {canManageBudget && copiableBudgets.length > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-[24px] border border-rose-border bg-rose-bg/40 p-3.5 shadow-soft">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-rose-bg text-rose-dark border border-rose-border">
+              <Copy size={15} />
+            </span>
+            <div className="min-w-0">
+              <strong className="block text-xs font-black text-ink">
+                Salin dari Periode Sebelumnya
+              </strong>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Tersedia {copiableBudgets.length} target anggaran dari periode {formatBudgetCycleLabel(prevCycle.month, prevCycle.year)}.
+              </p>
+            </div>
           </div>
-          <small className="text-[11px] text-muted-foreground">Ketuk card untuk melihat transaksi periode ini.</small>
+          <button
+            type="button"
+            disabled={copying}
+            onClick={handleCopyFromPrevious}
+            className="shrink-0 rounded-2xl border border-line bg-panel px-3 py-1.5 text-xs font-black text-rose-dark shadow-soft transition hover:bg-rose-bg disabled:opacity-60"
+          >
+            {copying ? "Menyalin..." : "Salin"}
+          </button>
+        </div>
+      )}
+
+      {/* Smart Action 2: Pengeluaran Tanpa Anggaran */}
+      {unbudgetedExpenses.length > 0 && (
+        <div className="grid gap-2 rounded-[24px] border border-amber-500/30 bg-amber-500/10 p-3.5 shadow-soft">
+          <div className="flex items-start gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300">
+              <AlertTriangle size={15} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <strong className="block text-xs font-black text-ink">
+                Pengeluaran Tanpa Anggaran ({formatRupiah(totalUnbudgeted)})
+              </strong>
+              <p className="text-[11px] text-muted-foreground">
+                Ada pengeluaran pada {unbudgetedExpenses.length} kategori yang belum memiliki target batas anggaran di periode ini.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {unbudgetedExpenses.map((unb) => (
+              <div
+                key={unb.categoryId}
+                className="flex items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 py-1 text-[11px] font-bold text-ink shadow-soft"
+              >
+                <span>{unb.name}:</span>
+                <span className="text-red font-black">{formatRupiah(unb.total)}</span>
+                {canManageBudget && (
+                  <button
+                    type="button"
+                    onClick={() => openCreateForCategory(unb.categoryId, unb.total)}
+                    className="ml-0.5 inline-flex items-center gap-0.5 rounded-full bg-rose-bg px-2 py-0.5 text-[10px] font-black text-rose-dark transition hover:bg-rose-strong hover:text-white"
+                  >
+                    <span>+ Anggarkan</span>
+                    <ArrowRight size={10} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <section className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Anggaran Kategori</p>
+            <h2 className="font-display text-lg tracking-tight text-ink">{filteredBudgets.length} anggaran aktif</h2>
+          </div>
+          <small className="text-[11px] text-muted-foreground">Ketuk kartu untuk melihat rincian.</small>
         </div>
 
+        {/* Smart Action 3: Status Filter Chips */}
+        {filteredBudgets.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-black transition",
+                statusFilter === "all"
+                  ? "border-rose-strong bg-rose-bg text-rose-dark shadow-soft"
+                  : "border-line bg-panel text-muted-foreground hover:text-ink"
+              )}
+            >
+              <span>Semua</span>
+              <span className="rounded-full bg-soft px-1.5 py-0.2 text-[10px]">{statusCounts.all}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter("attention")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-black transition",
+                statusFilter === "attention"
+                  ? "border-red-border bg-red-bg text-red shadow-soft"
+                  : "border-line bg-panel text-muted-foreground hover:text-ink"
+              )}
+            >
+              <span>Perlu Perhatian</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
+                  statusCounts.attention > 0 ? "bg-red text-white" : "bg-soft text-muted-foreground"
+                )}
+              >
+                {statusCounts.attention}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter("safe")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-black transition",
+                statusFilter === "safe"
+                  ? "border-green-border bg-green-bg text-green shadow-soft"
+                  : "border-line bg-panel text-muted-foreground hover:text-ink"
+              )}
+            >
+              <span>Aman</span>
+              <span className="rounded-full bg-soft px-1.5 py-0.2 text-[10px]">{statusCounts.safe}</span>
+            </button>
+          </div>
+        )}
+
         <div className="grid gap-3">
-          {filteredBudgets.length ? (
-            filteredBudgets.map((budget, idx) => {
+          {displayedBudgets.length ? (
+            displayedBudgets.map((budget, idx) => {
               const account = (accountBalances as Account[]).find((item) => item.id === budget.accountId);
               const categoryName = (categories as Category[]).find((c) => c.id === budget.categoryId)?.name;
               const meta = getUsageMeta(budget, cycleTransactions);
@@ -550,14 +824,16 @@ export default function Budgets() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <strong className="block truncate text-sm font-black text-ink">{budget.name}</strong>
-                      <small className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-                        <Wallet size={12} /> {account?.name || "Dompet tidak ditemukan"}
-                      </small>
-                      {categoryName && (
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-line bg-soft px-2 py-0.5 text-[10px] font-black text-muted-foreground">
-                          {categoryName}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {categoryName && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rose-border bg-rose-bg px-2 py-0.5 text-[10px] font-black text-rose-dark">
+                            <Tag size={10} /> {categoryName}
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+                          <Wallet size={12} /> {account?.name || "Lintas dompet"}
                         </span>
-                      )}
+                      </div>
                     </div>
                   </div>
 
@@ -596,10 +872,22 @@ export default function Budgets() {
                         style={{ width: `${meta.progress}%` }}
                       />
                     </div>
-                    <small className="text-[11px] font-semibold text-muted-foreground">{meta.progressRaw}% terpakai</small>
+                    {/* Smart Action 4: Laju Belanja Harian (Daily Safe Pace) */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                      <small className="text-[11px] font-semibold text-muted-foreground">{meta.progressRaw}% terpakai</small>
+                      {meta.overBudget ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-red-border bg-red-bg px-2 py-0.5 text-[10.5px] font-black text-red">
+                          <AlertTriangle size={11} /> Over {formatRupiah(meta.overBudgetAmount)}
+                        </span>
+                      ) : meta.usage.remaining > 0 && isCurrentCycle ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-green-border bg-green-bg px-2 py-0.5 text-[10.5px] font-black text-green">
+                          <ShieldCheck size={12} /> Aman ~{formatRupiah(Math.floor(meta.usage.remaining / daysLeftInCycle))}/hari ({daysLeftInCycle} hr)
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3 pt-1">
                     <small className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
                       <CalendarDays size={12} /> {formatBudgetCycleRange(budget.month, budget.year)}
                     </small>
@@ -608,7 +896,7 @@ export default function Budgets() {
                         <button
                           type="button"
                           onClick={(event) => startEditBudget(budget, event)}
-                          aria-label={`Edit alokasi ${budget.name}`}
+                          aria-label={`Edit anggaran ${budget.name}`}
                           className="inline-flex min-h-[32px] items-center gap-1 rounded-full border border-line bg-blue-bg px-3 py-1.5 text-[11px] font-black text-blue transition hover:opacity-80"
                         >
                           <Edit3 size={13} /> Edit
@@ -619,7 +907,7 @@ export default function Budgets() {
                             event.stopPropagation();
                             setDeleteTarget(budget);
                           }}
-                          aria-label={`Hapus alokasi ${budget.name}`}
+                          aria-label={`Hapus anggaran ${budget.name}`}
                           className="inline-flex min-h-[32px] items-center gap-1 rounded-full border border-line bg-red-bg px-3 py-1.5 text-[11px] font-black text-red transition hover:opacity-80"
                         >
                           <Trash2 size={13} /> Hapus
@@ -630,19 +918,32 @@ export default function Budgets() {
                 </motion.article>
               );
             })
+          ) : filteredBudgets.length > 0 ? (
+            <div className="rounded-[24px] border border-line bg-panel p-6 text-center shadow-soft">
+              <p className="text-xs font-semibold text-muted-foreground">
+                Tidak ada anggaran dengan status &quot;{statusFilter === "attention" ? "Perlu Perhatian" : "Aman"}&quot;.
+              </p>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className="mt-2 text-xs font-black text-rose-dark hover:underline"
+              >
+                Lihat Semua Anggaran ({filteredBudgets.length})
+              </button>
+            </div>
           ) : (
             <section className="rounded-[28px] border border-dashed border-line-strong bg-panel-strong/90 p-6 text-center shadow-soft">
               <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-rose-bg text-rose-dark">
                 <Sparkles size={20} />
               </div>
-              <h3 className="mt-3 font-display text-sm font-black text-ink">Belum ada alokasi</h3>
+              <h3 className="mt-3 font-display text-sm font-black text-ink">Belum ada anggaran</h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Mulai atur keuangan gajian 25–24 dengan menambah alokasi pertama. Biar pengeluaran lebih terkendali.
+                Mulai atur keuangan gajian 25–24 dengan menentukan batas belanja kategori pertama agar pengeluaran keluarga lebih terencana.
               </p>
               {canManageBudget ? (
-                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Tap tombol di bawah untuk menambah.</p>
+                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Tap tombol di bawah untuk menambah anggaran.</p>
               ) : (
-                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Minta owner/admin untuk menambah alokasi.</p>
+                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Minta owner/admin untuk menambah anggaran.</p>
               )}
             </section>
           )}
@@ -653,7 +954,7 @@ export default function Budgets() {
             onClick={openCreateForm}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/40 text-sm font-black text-on-accent shadow-accent transition hover:opacity-95 [background-image:var(--gradient-brand)]"
           >
-            <Plus size={18} /> Tambah Alokasi
+            <Plus size={18} /> Tambah Anggaran Kategori
           </button>
         )}
       </section>
@@ -670,9 +971,9 @@ export default function Budgets() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Hapus alokasi ini?"
+        title="Hapus anggaran ini?"
         message={deleteMessage}
-        confirmLabel="Hapus Alokasi"
+        confirmLabel="Hapus Anggaran"
         busyLabel="Menghapus..."
         busy={deleting}
         onConfirm={confirmRemoveBudget}

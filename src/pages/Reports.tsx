@@ -206,13 +206,18 @@ export default function Reports() {
   }, [accountId, budgetId, budgets, month, year]);
 
   const filteredTransactions = useMemo(() => {
+    const selectedBudgetObj = budgets.find((b) => b.id === budgetId);
     return transactions.filter((transaction) => {
       const inCycle = isDateInBudgetCycle(getTransactionDate(transaction), selectedCycle);
       const sameAccount = accountId === "all" || transaction.accountId === accountId || transaction.account_id === accountId;
-      const sameBudget = budgetId === "all" || transaction.budgetId === budgetId || transaction.budget_id === budgetId;
+      const sameBudget =
+        budgetId === "all" ||
+        transaction.budgetId === budgetId ||
+        transaction.budget_id === budgetId ||
+        Boolean(selectedBudgetObj?.categoryId && (transaction.categoryId || transaction.category_id) === selectedBudgetObj.categoryId);
       return inCycle && sameAccount && sameBudget;
     });
-  }, [accountId, budgetId, selectedCycle, transactions]);
+  }, [accountId, budgetId, budgets, selectedCycle, transactions]);
 
   const incomeTotal = useMemo(() => amountByType(filteredTransactions, "income"), [filteredTransactions]);
   const expenseTotal = useMemo(() => amountByType(filteredTransactions, "expense"), [filteredTransactions]);
@@ -222,7 +227,12 @@ export default function Reports() {
     return periodBudgets
       .map((budget) => {
         const used = filteredTransactions
-          .filter((transaction) => transaction.type === "expense" && (transaction.budgetId || transaction.budget_id) === budget.id)
+          .filter(
+            (transaction) =>
+              transaction.type === "expense" &&
+              ((budget.categoryId && (transaction.categoryId || transaction.category_id) === budget.categoryId) ||
+                (transaction.budgetId || transaction.budget_id) === budget.id)
+          )
           .reduce((total, transaction) => total + Number(transaction.amount || 0), 0);
         const amount = Number(budget.amount || 0);
         const remaining = amount - used;

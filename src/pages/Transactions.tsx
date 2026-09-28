@@ -83,7 +83,11 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
       const matchCreator = filters.creatorId === "all" || trx.createdBy === filters.creatorId;
       const matchAccount = filters.accountId === "all" || trx.accountId === filters.accountId;
       const matchCategory = filters.categoryId === "all" || trx.categoryId === filters.categoryId;
-      const matchBudget = filters.budgetId === "all" || trx.budgetId === filters.budgetId;
+      const selectedFilterBudget = (budgets as Budget[]).find((b) => b.id === filters.budgetId);
+      const matchBudget =
+        filters.budgetId === "all" ||
+        trx.budgetId === filters.budgetId ||
+        Boolean(selectedFilterBudget?.categoryId && trx.categoryId === selectedFilterBudget.categoryId);
       const matchStartDate = !filters.startDate || trx.transactionDate >= filters.startDate;
       const matchEndDate = !filters.endDate || trx.transactionDate <= filters.endDate;
 
@@ -134,7 +138,6 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
 
   const filteredIncome = filtered.filter((trx) => trx.type === "income").reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
   const filteredExpense = filtered.filter((trx) => trx.type === "expense").reduce((sum, trx) => sum + Number(trx.amount || 0), 0);
-  const incomeCategories = (categories as Category[]).filter((category) => category.type === "income");
 
   const resetFilters = () => {
     setQuery("");
@@ -307,32 +310,32 @@ export default function Transactions({ onEdit, onAdd }: TransactionsProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
-                <label className={labelClassName}>Alokasi Pengeluaran</label>
-                <select
-                  value={filters.budgetId}
-                  onChange={(event) => setFilters({ ...filters, budgetId: event.target.value })}
-                  className={selectClassName}
-                >
-                  <option value="all">Semua alokasi</option>
-                  {(budgets as Budget[]).map((budget) => (
-                    <option value={budget.id} key={budget.id}>
-                      {budget.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-2">
-                <label className={labelClassName}>Kategori Pemasukan</label>
+                <label className={labelClassName}>Kategori</label>
                 <select
                   value={filters.categoryId}
                   onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}
                   className={selectClassName}
                 >
                   <option value="all">Semua kategori</option>
-                  {incomeCategories.map((category) => (
+                  {(categories as Category[]).map((category) => (
                     <option value={category.id} key={category.id}>
                       {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className={labelClassName}>Anggaran</label>
+                <select
+                  value={filters.budgetId}
+                  onChange={(event) => setFilters({ ...filters, budgetId: event.target.value })}
+                  className={selectClassName}
+                >
+                  <option value="all">Semua anggaran</option>
+                  {(budgets as Budget[]).map((budget) => (
+                    <option value={budget.id} key={budget.id}>
+                      {budget.name}
                     </option>
                   ))}
                 </select>

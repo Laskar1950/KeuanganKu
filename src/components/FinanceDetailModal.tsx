@@ -119,15 +119,19 @@ export default function FinanceDetailModal({
     }
 
     const budgetItem = item as Budget & { month: number; year: number };
-    const budgetTransactions = transactions
-      .filter((trx) => trx.budgetId === budgetItem.id)
+    const sameMonthTransactions = getBudgetCycleTransactions(transactions, budgetItem.month, budgetItem.year);
+    const budgetTransactions = sameMonthTransactions
+      .filter(
+        (trx) =>
+          trx.type === "expense" &&
+          ((budgetItem.categoryId && trx.categoryId === budgetItem.categoryId) || trx.budgetId === budgetItem.id)
+      )
       .sort(
         (a, b) =>
           String(b.transactionDate).localeCompare(String(a.transactionDate)) ||
           String(b.createdAt).localeCompare(String(a.createdAt))
       );
     const sourceAccount = accountBalances.find((account) => account.id === budgetItem.accountId);
-    const sameMonthTransactions = getBudgetCycleTransactions(transactions, budgetItem.month, budgetItem.year);
     const sourceIncome = sameMonthTransactions.filter(
       (trx) => trx.type === "income" && trx.accountId === budgetItem.accountId
     );

@@ -704,7 +704,7 @@ export default function Dashboard({ goTo, onNavigate, onAddTransaction: _onAddTr
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h3 className="truncate text-[13.5px] font-black text-ink">{budget.name}</h3>
-                        <p className="text-[11px] text-muted-foreground">{wallet?.name || "Dompet tidak ditemukan"}</p>
+                        <p className="text-[11px] text-muted-foreground">{wallet?.name || "Lintas dompet"}</p>
                       </div>
                       <strong className={cn("shrink-0 text-[12.5px] font-black", overBudget ? "text-red" : "text-ink")}>
                         {overBudget ? `Over ${formatRupiah(Math.abs(usage.remaining))}` : formatRupiah(usage.remaining)}
@@ -715,7 +715,7 @@ export default function Dashboard({ goTo, onNavigate, onAddTransaction: _onAddTr
                 );
               })
             ) : (
-              <p className="text-xs font-semibold text-muted-foreground">Belum ada alokasi untuk periode gajian ini.</p>
+              <p className="text-xs font-semibold text-muted-foreground">Belum ada anggaran untuk periode gajian ini.</p>
             )}
           </div>
         </section>
