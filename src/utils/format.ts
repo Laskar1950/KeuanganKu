@@ -8,6 +8,19 @@ export const formatRupiah = (value: number | string | null | undefined = 0): str
 export const formatDate = (isoDate?: string | null): string => {
   if (!isoDate) return "-";
 
+  if (typeof isoDate === "string") {
+    const [datePart] = isoDate.split("T");
+    const parts = datePart.split("-").map(Number);
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      return new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(date);
+    }
+  }
+
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return "-";
 
@@ -19,13 +32,34 @@ export const formatDate = (isoDate?: string | null): string => {
 };
 
 export const toLocalDateKey = (value: Date | string = new Date()): string => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
 
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  if (typeof value === "string") {
+    const [datePart] = value.split("T");
+    const parts = datePart.split("-").map(Number);
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      const year = parts[0];
+      const month = String(parts[1]).padStart(2, "0");
+      const day = String(parts[2]).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const day = String(parsed.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+    return "";
+  }
+
+  return "";
 };
 
 export const todayKey = (): string => toLocalDateKey(new Date());

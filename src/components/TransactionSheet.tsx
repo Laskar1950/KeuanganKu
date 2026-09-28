@@ -344,18 +344,19 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
   const handleParseMB = () => {
     const parsed = parseMBankingText(mbText);
     setMbParsed(parsed);
-    if (parsed.amount != null) {
-      setField("amount", String(parsed.amount));
-    }
     if (parsed.type) {
-      setType(parsed.type);
-      // delay to allow type switch to clear fields then re-apply
-      window.setTimeout(() => {
-        if (parsed.amount != null) setField("amount", String(parsed.amount));
-        if (parsed.note) setField("note", parsed.note.slice(0, 90));
-      }, 50);
-    } else if (parsed.note) {
-      setField("note", parsed.note.slice(0, 90));
+      setForm((prev) => ({
+        ...prev,
+        type: parsed.type!,
+        categoryId: "",
+        budgetId: "",
+        accountId: "",
+        amount: parsed.amount != null ? String(parsed.amount) : prev.amount,
+        note: parsed.note ? parsed.note.slice(0, 90) : prev.note,
+      }));
+    } else {
+      if (parsed.amount != null) setField("amount", String(parsed.amount));
+      if (parsed.note) setField("note", parsed.note.slice(0, 90));
     }
     if (parsed.amount || parsed.type) {
       notify(parsed.confidence === "high" ? `Terdeteksi ${parsed.bank || "Bank"} Rp${parsed.amount?.toLocaleString("id-ID")} — cek lagi sebelum simpan` : "Terisi dari notifikasi — silakan cek");
@@ -366,9 +367,12 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
 
   const handleApplyMB = () => {
     if (!mbParsed) return;
-    if (mbParsed.amount != null) setField("amount", String(mbParsed.amount));
-    if (mbParsed.type) setType(mbParsed.type);
-    if (mbParsed.note) setField("note", mbParsed.note.slice(0, 90));
+    setForm((prev) => ({
+      ...prev,
+      ...(mbParsed.type ? { type: mbParsed.type, categoryId: "", budgetId: "", accountId: "" } : {}),
+      ...(mbParsed.amount != null ? { amount: String(mbParsed.amount) } : {}),
+      ...(mbParsed.note ? { note: mbParsed.note.slice(0, 90) } : {}),
+    }));
   };
 
   // Auto-handle Web Share Target: ?text=... or ?title=... when sheet opens

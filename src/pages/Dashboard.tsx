@@ -31,6 +31,7 @@ import type { Account, AppNotification, Budget, Transaction } from "@/types";
 interface DashboardProps {
   goTo?: (tab: string) => void;
   onNavigate?: (tab: string) => void;
+  onAddTransaction?: () => void;
 }
 
 function getNotificationMeta(notification: AppNotification) {
@@ -172,7 +173,7 @@ function Avatar({ user }: { user?: { name?: string; avatarUrl?: string } | null 
   );
 }
 
-export default function Dashboard({ goTo, onNavigate }: DashboardProps) {
+export default function Dashboard({ goTo, onNavigate, onAddTransaction: _onAddTransaction }: DashboardProps) {
   const {
     user,
     household,

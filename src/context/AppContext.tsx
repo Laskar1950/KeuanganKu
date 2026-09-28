@@ -418,6 +418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshData = useCallback(
     async (sessionOverride: Session | null = null, { silent = false }: { silent?: boolean } = {}) => {
       requireSupabaseEnv();
+      if (refreshInFlightRef.current) return;
       if (!silent) setLoading(true);
       refreshInFlightRef.current = true;
 
@@ -578,17 +579,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const notification = toNotification(payload.new);
           if (notification.userId && notification.userId !== state.user?.id) return;
 
-          setState((prev) => ({
-            ...prev,
-            notifications: [notification, ...prev.notifications.filter((item) => item.id !== notification.id)].slice(0, 50),
-          }));
+          let isNew = false;
+          setState((prev) => {
+            if (prev.notifications.some((item) => item.id === notification.id)) {
+              return prev;
+            }
+            isNew = true;
+            return {
+              ...prev,
+              notifications: [notification, ...prev.notifications].slice(0, 50),
+            };
+          });
 
-          // Coalesce transaction notifications, immediate for others
-          if (notification.type === "transaction" || notification.type === "expense" || notification.type === "income") {
-            queueTxNotification(notification);
-          } else {
-            notify(notification.title);
-            showBrowserNotification(notification.title, notification.message);
+          // Only alert if this notification was not already added optimistically by the creator
+          if (isNew) {
+            if (notification.type === "transaction" || notification.type === "expense" || notification.type === "income") {
+              queueTxNotification(notification);
+            } else {
+              notify(notification.title);
+              showBrowserNotification(notification.title, notification.message);
+            }
           }
         }
       )
@@ -700,7 +710,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...prev,
           notifications: [myNotif, ...prev.notifications.filter((item) => item.id !== myNotif.id)].slice(0, 50),
         }));
-        queueTxNotification(myNotif);
       }
       // Trigger background push coalesced to other family members (exclude current user who already sees toast)
       schedulePushCoalesced({
@@ -994,6 +1003,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refreshData();
   };
 
+  const currentMember = useMemo(() => {
+    return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
+  }, [state.familyMembers, state.user?.id]);
+
+  const permissions = useMemo(() => getPermissions(currentMember), [currentMember]);
+
   const updateTransaction = async (id: string, payload: TransactionPayload) => {
     const existingTransaction = state.transactions.find((item) => item.id === id);
     assertCanUpdateTransaction(currentMember, existingTransaction, state.user?.id);
@@ -1065,12 +1080,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     notify("Transaksi berhasil dihapus.");
     await refreshData();
   };
-
-  const currentMember = useMemo(() => {
-    return state.familyMembers.find((member) => member.userId === state.user?.id) || null;
-  }, [state.familyMembers, state.user?.id]);
-
-  const permissions = useMemo(() => getPermissions(currentMember), [currentMember]);
 
   const addFamilyMemberByIdentifier = async ({ identifier, role = "member" }: { identifier: string; role?: string }) => {
     assertOwnerOrAdmin(currentMember);
@@ -1399,30 +1408,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const depositSavingGoal = async (id: string, amount: number | string) => {
     assertOwnerOrAdmin(currentMember);
     if (!id) throw new Error("Pilih target tabungan terlebih dahulu.");
-    if (!amount || Number(amount) <= 0) throw new Error("Nominal setoran wajib lebih besar dari 0.");
+    const depositNominal = Number(amount);
+    if (!amount || depositNominal <= 0 || Number.isNaN(depositNominal)) {
+      throw new Error("Nominal setoran wajib lebih besar dari 0.");
+    }
 
-    const goal = state.savingGoals.find((item) => item.id === id);
-    if (!goal) throw new Error("Target tabungan tidak ditemukan.");
-    const nextAmount = Number(goal.currentAmount) + Number(amount);
+    // Fetch fresh goal state from DB to avoid client race condition
+    const { data: freshGoal, error: fetchGoalErr } = await supabase
+      .from("saving_goals")
+      .select("id, name, current_amount, target_amount, status")
+      .eq("id", id)
+      .single();
 
-    const { error: depositError } = await supabase.from("saving_goal_transactions").insert({
-      saving_goal_id: id,
-      amount: Number(amount),
-      transaction_date: toLocalDateKey(),
-      note: "Setoran dari aplikasi",
-    });
+    if (fetchGoalErr || !freshGoal) throw new Error("Target tabungan tidak ditemukan.");
+
+    const currentActual = Number(freshGoal.current_amount || 0);
+    const nextAmount = currentActual + depositNominal;
+    const targetAmount = Number(freshGoal.target_amount || 0);
+
+    const { data: insertedTx, error: depositError } = await supabase
+      .from("saving_goal_transactions")
+      .insert({
+        saving_goal_id: id,
+        amount: depositNominal,
+        transaction_date: toLocalDateKey(),
+        note: "Setoran dari aplikasi",
+      })
+      .select("id")
+      .single();
+
     if (depositError) throw depositError;
 
     const { error: goalError } = await supabase
       .from("saving_goals")
-      .update({ current_amount: nextAmount, status: nextAmount >= Number(goal.targetAmount) ? "completed" : goal.status })
+      .update({
+        current_amount: nextAmount,
+        status: nextAmount >= targetAmount ? "completed" : freshGoal.status,
+      })
       .eq("id", id);
-    if (goalError) throw goalError;
+
+    if (goalError) {
+      // Rollback inserted transaction if goal update failed
+      if (insertedTx?.id) {
+        await supabase.from("saving_goal_transactions").delete().eq("id", insertedTx.id);
+      }
+      throw goalError;
+    }
 
     await createNotification({
       type: "goal",
       title: "Setoran tabungan masuk",
-      message: `${state.user?.name || "Anggota keluarga"} menyetor ${formatCurrency(amount)} ke target ${goal.name}.`,
+      message: `${state.user?.name || "Anggota"} menyetor ${formatCurrency(depositNominal)} ke target ${freshGoal.name}.`,
       target: "settings",
     });
 
@@ -1452,11 +1488,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
 
     const next = data.map(toTransaction);
-    setState((prev) => ({
-      ...prev,
-      transactions: [...prev.transactions, ...next],
-      transactionsHasMore: next.length >= TRANSACTION_WINDOW,
-    }));
+    setState((prev) => {
+      const existingIds = new Set(prev.transactions.map((t) => t.id));
+      const filteredNext = next.filter((t) => !existingIds.has(t.id));
+      return {
+        ...prev,
+        transactions: [...prev.transactions, ...filteredNext],
+        transactionsHasMore: next.length >= TRANSACTION_WINDOW,
+      };
+    });
   }, [state.household?.id, state.transactions.length, state.transactionsHasMore]);
 
   const value: AppContextValue = {
