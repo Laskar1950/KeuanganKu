@@ -60,14 +60,15 @@ export interface TransactionPayload {
   transactionDate: string;
   note?: string | null;
   accountId?: string | null;
-  categoryId?: string | null;
-  budgetId?: string | null;
+  categoryId?: string | null;  // wajib untuk semua transaksi (income & expense)
+  budgetId?: string | null;    // opsional, hanya relevan untuk expense
 }
 
 export interface BudgetPayload {
   name: string;
   amount: number | string;
   accountId: string;
+  categoryId?: string | null;
   month: number | string;
   year: number | string;
   note?: string | null;
@@ -873,9 +874,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Mengambil alokasi anggaran jika dipilih. Budget sekarang OPSIONAL untuk expense.
+  // Jika budgetId diisi, validasi periode dan keberadaannya.
+  // Jika budgetId kosong, kembalikan null — pengeluaran tetap valid tanpa alokasi.
   const getAllocationForTransaction = (payload: TransactionPayload): Budget | null => {
     if (payload.type !== "expense") return null;
-    if (!payload.budgetId) throw new Error("Pengeluaran wajib memilih alokasi anggaran.");
+    if (!payload.budgetId) return null; // opsional — boleh tidak pilih alokasi
 
     const budget = state.budgets.find((item) => item.id === payload.budgetId);
     if (!budget) throw new Error("Alokasi anggaran tidak ditemukan. Pilih ulang alokasi.");
@@ -888,9 +892,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
     }
 
-    // Penting:
-    // Alokasi anggaran boleh menjadi minus/over budget.
-    // Batas validasi transaksi pengeluaran adalah saldo dompet sumber, bukan sisa alokasi.
+    // Alokasi boleh over budget — batas validasi adalah saldo dompet, bukan sisa alokasi.
     return budget;
   };
 
@@ -950,23 +952,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTransaction = async (payload: TransactionPayload) => {
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error("Nominal transaksi wajib lebih besar dari 0.");
     if (!payload.transactionDate) throw new Error("Tanggal transaksi wajib dipilih.");
+    if (!payload.categoryId) throw new Error("Kategori transaksi wajib dipilih.");
 
     const isExpense = payload.type === "expense";
+
+    // Kategori wajib untuk semua jenis transaksi
+    const category = state.categories.find((c) => c.id === payload.categoryId);
+    if (!category) throw new Error("Kategori tidak ditemukan. Pilih ulang kategori.");
+
+    // Budget opsional untuk expense — validasi hanya jika dipilih
     const budget = getAllocationForTransaction(payload);
-    const accountId = isExpense ? budget?.accountId : payload.accountId;
-    const categoryId = isExpense ? null : payload.categoryId;
 
+    // Akun/dompet: jika expense dengan budget → gunakan dompet dari budget
+    // Jika expense tanpa budget → wajib pilih dompet manual
+    // Jika income → wajib pilih dompet manual
+    const accountId = (isExpense && budget?.accountId) ? budget.accountId : payload.accountId;
     if (!accountId) throw new Error("Akun/dompet wajib dipilih.");
-    if (!isExpense && !categoryId) throw new Error("Kategori pemasukan wajib dipilih.");
 
-    const projection = isExpense ? getBudgetProjection(budget, payload.amount) : null;
+    const projection = (isExpense && budget) ? getBudgetProjection(budget, payload.amount) : null;
     const sourceCheck = isExpense ? validateExpenseSourceBalance({ accountId, amount: payload.amount }) : null;
 
     const { error } = await supabase.from("transactions").insert({
       family_id: state.household!.id,
       account_id: accountId,
-      category_id: categoryId,
-      budget_id: isExpense ? budget?.id : null,
+      category_id: payload.categoryId,
+      budget_id: isExpense ? (budget?.id ?? null) : null,
       created_by: state.user!.id,
       type: payload.type,
       amount: Number(payload.amount),
@@ -976,7 +986,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
 
     const targetAccount = state.accounts.find((a) => a.id === accountId);
-    const category = !isExpense && categoryId ? state.categories.find((c) => c.id === categoryId) : null;
 
     await createNotification({
       type: isExpense ? "expense" : "income",
@@ -985,7 +994,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : `Pemasukan ${formatCurrency(payload.amount)}`,
       message: `${state.user?.name || "Anggota"} mencatat ${isExpense ? "pengeluaran" : "pemasukan"} ${formatCurrency(
         payload.amount
-      )}${payload.note ? ` (${payload.note})` : ""}${isExpense && budget?.name ? ` • Alokasi: ${budget.name}` : ""}${category?.name ? ` • Kategori: ${category.name}` : ""}${targetAccount?.name ? ` • Dompet: ${targetAccount.name}` : ""}${
+      )}${payload.note ? ` (${payload.note})` : ""}${category?.name ? ` • Kategori: ${category.name}` : ""}${isExpense && budget?.name ? ` • Alokasi: ${budget.name}` : ""}${targetAccount?.name ? ` • Dompet: ${targetAccount.name}` : ""}${
         projection?.overBudget ? ` • Over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
       }${sourceCheck?.isNegative ? ` (saldo minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
@@ -997,7 +1006,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : isExpense && projection?.overBudget
           ? `Pengeluaran berhasil disimpan sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
           : isExpense
-            ? "Pengeluaran berhasil disimpan. Saldo dompet otomatis berkurang."
+            ? "Pengeluaran berhasil disimpan."
             : "Transaksi berhasil disimpan."
     );
     await refreshData();
@@ -1015,24 +1024,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (!payload.amount || Number(payload.amount) <= 0) throw new Error("Nominal transaksi wajib lebih besar dari 0.");
     if (!payload.transactionDate) throw new Error("Tanggal transaksi wajib dipilih.");
+    if (!payload.categoryId) throw new Error("Kategori transaksi wajib dipilih.");
 
     const isExpense = payload.type === "expense";
+
+    const category = state.categories.find((c) => c.id === payload.categoryId);
+    if (!category) throw new Error("Kategori tidak ditemukan. Pilih ulang kategori.");
+
+    // Budget opsional untuk expense
     const budget = getAllocationForTransaction(payload);
-    const accountId = isExpense ? budget?.accountId : payload.accountId;
-    const categoryId = isExpense ? null : payload.categoryId;
 
+    // Dompet: dari budget jika ada, atau dari payload, atau dari transaksi existing
+    const accountId = (isExpense && budget?.accountId)
+      ? budget.accountId
+      : payload.accountId || existingTransaction?.accountId;
     if (!accountId) throw new Error("Akun/dompet wajib dipilih.");
-    if (!isExpense && !categoryId) throw new Error("Kategori pemasukan wajib dipilih.");
 
-    const projection = isExpense ? getBudgetProjection(budget, payload.amount, id) : null;
-    const sourceCheck = isExpense ? validateExpenseSourceBalance({ accountId, amount: payload.amount, ignoreTransactionId: id }) : null;
+    const projection = (isExpense && budget) ? getBudgetProjection(budget, payload.amount, id) : null;
+    const sourceCheck = isExpense
+      ? validateExpenseSourceBalance({ accountId, amount: payload.amount, ignoreTransactionId: id })
+      : null;
 
     const { error } = await supabase
       .from("transactions")
       .update({
         account_id: accountId,
-        category_id: categoryId,
-        budget_id: isExpense ? budget?.id : null,
+        category_id: payload.categoryId,
+        budget_id: isExpense ? (budget?.id ?? null) : null,
         type: payload.type,
         amount: Number(payload.amount),
         transaction_date: payload.transactionDate,
@@ -1044,7 +1062,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await createNotification({
       type: isExpense ? "expense" : "income",
       title: isExpense ? `Pengeluaran diubah: ${formatCurrency(payload.amount)}` : `Pemasukan diubah: ${formatCurrency(payload.amount)}`,
-      message: `${state.user?.name || "Anggota"} memperbarui transaksi ${formatCurrency(payload.amount)}${
+      message: `${state.user?.name || "Anggota"} memperbarui transaksi ${formatCurrency(payload.amount)}${category?.name ? ` • Kategori: ${category.name}` : ""}${isExpense && budget?.name ? ` • Alokasi: ${budget.name}` : ""}${
         projection?.overBudget ? ` • Over budget ${formatCurrency(projection.overBudgetAmount)}` : ""
       }${sourceCheck?.isNegative ? ` (saldo dompet minus ${formatCurrency(sourceCheck.deficit)})` : ""}.`,
       target: "transactions",
@@ -1056,7 +1074,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : isExpense && projection?.overBudget
           ? `Pengeluaran berhasil diperbarui sebagai over budget ${formatCurrency(projection.overBudgetAmount)}.`
           : isExpense
-            ? "Pengeluaran berhasil diperbarui. Saldo dompet ikut disesuaikan."
+            ? "Pengeluaran berhasil diperbarui."
             : "Transaksi berhasil diperbarui."
     );
     await refreshData();
@@ -1278,7 +1296,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       family_id: state.household!.id,
       name: payload.name.trim(),
       account_id: payload.accountId,
-      category_id: null,
+      category_id: payload.categoryId || null,
       month: Number(payload.month),
       year: Number(payload.year),
       amount: Number(payload.amount),
@@ -1328,7 +1346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .update({
         name: payload.name.trim(),
         account_id: payload.accountId,
-        category_id: null,
+        category_id: payload.categoryId || null,
         month: Number(payload.month),
         year: Number(payload.year),
         amount: Number(payload.amount),

@@ -13,12 +13,13 @@ import {
   getBudgetCycleTransactions,
   getCurrentBudgetCycle,
 } from "@/utils/budgetCycle";
-import type { Account, Budget, Transaction } from "@/types";
+import type { Account, Budget, Category, Transaction } from "@/types";
 
 interface BudgetForm {
   name: string;
   amount: string;
   accountId: string;
+  categoryId: string;
   month: number;
   year: number;
   note: string;
@@ -28,6 +29,7 @@ const createEmptyBudgetForm = (cycle: { month: number; year: number } = getCurre
   name: "",
   amount: "",
   accountId: "",
+  categoryId: "",
   month: Number(cycle.month),
   year: Number(cycle.year),
   note: "",
@@ -66,6 +68,7 @@ export default function Budgets() {
     budgets,
     transactions,
     accountBalances,
+    categories,
     currentMember,
     addBudget,
     updateBudget,
@@ -114,6 +117,11 @@ export default function Budgets() {
     });
   }, [accountBalances, currentUserId, isManager, showAllWallets, form.accountId]);
 
+  const expenseCategories = useMemo(
+    () => (categories as Category[]).filter((c) => c.type === "expense"),
+    [categories]
+  );
+
   const totals = filteredBudgets.reduce(
     (acc, budget) => {
       const { usage, overBudgetAmount } = getUsageMeta(budget, cycleTransactions);
@@ -157,6 +165,7 @@ export default function Budgets() {
       setSubmitting(true);
       if (!canManageBudget) throw new Error("Hanya owner atau admin yang bisa mengelola alokasi.");
       if (!form.name.trim()) throw new Error("Nama alokasi wajib diisi.");
+      if (!form.categoryId) throw new Error("Kategori pengeluaran wajib dipilih.");
       if (!form.accountId) throw new Error("Sumber dompet wajib dipilih.");
       if (Number(form.amount || 0) <= 0) throw new Error("Nominal alokasi harus lebih dari 0.");
 
@@ -164,6 +173,7 @@ export default function Budgets() {
         name: form.name.trim(),
         amount: Number(form.amount || 0),
         accountId: form.accountId,
+        categoryId: form.categoryId,
         month: Number(form.month),
         year: Number(form.year),
         note: form.note?.trim() || "",
@@ -191,6 +201,7 @@ export default function Budgets() {
       name: budget.name || "",
       amount: String(budget.amount || ""),
       accountId: budget.accountId || "",
+      categoryId: budget.categoryId || "",
       month: Number(budget.month),
       year: Number(budget.year),
       note: budget.note || "",
@@ -352,6 +363,29 @@ export default function Budgets() {
               />
             </div>
 
+            <div className="grid gap-2">
+              <label className={labelClassName}>Kategori pengeluaran <span className="text-red">*</span></label>
+              <select
+                value={form.categoryId}
+                onChange={(event) => setField("categoryId", event.target.value)}
+                className={cn(fieldClassName, "appearance-none")}
+                required
+              >
+                <option value="">Pilih kategori</option>
+                {expenseCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+              {expenseCategories.length === 0 && (
+                <small className="text-[11px] font-semibold text-muted-foreground">
+                  Belum ada kategori pengeluaran. Buat dulu di Pengaturan → Kategori.
+                </small>
+              )}
+              <small className="text-[11px] font-semibold text-muted-foreground">
+                Satu kategori hanya boleh memiliki satu alokasi per periode bulan.
+              </small>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <label className={labelClassName}>Nominal</label>
@@ -470,6 +504,7 @@ export default function Budgets() {
           {filteredBudgets.length ? (
             filteredBudgets.map((budget, idx) => {
               const account = (accountBalances as Account[]).find((item) => item.id === budget.accountId);
+              const categoryName = (categories as Category[]).find((c) => c.id === budget.categoryId)?.name;
               const meta = getUsageMeta(budget, cycleTransactions);
 
               return (
@@ -505,6 +540,11 @@ export default function Budgets() {
                       <small className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
                         <Wallet size={12} /> {account?.name || "Dompet tidak ditemukan"}
                       </small>
+                      {categoryName && (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-line bg-soft px-2 py-0.5 text-[10px] font-black text-muted-foreground">
+                          {categoryName}
+                        </span>
+                      )}
                     </div>
                   </div>
 

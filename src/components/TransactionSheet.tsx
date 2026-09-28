@@ -270,6 +270,11 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     [categories]
   );
 
+  const expenseCategories = useMemo(
+    () => (categories as Category[]).filter((category) => category.type === "expense"),
+    [categories]
+  );
+
   const cycle = useMemo(() => getBudgetCycle(form.transactionDate), [form.transactionDate]);
   const monthTransactions = useMemo(
     () => getBudgetCycleTransactions(transactions, cycle.month, cycle.year).filter((trx) => trx.id !== editingTransaction?.id),
@@ -403,7 +408,8 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     try {
       if (!quickCategoryName.trim()) throw new Error("Nama kategori wajib diisi.");
       setSavingCategory(true);
-      const category = await addCategory({ name: quickCategoryName, type: "income" });
+      // Buat kategori sesuai tipe transaksi yang sedang diisi
+      const category = await addCategory({ name: quickCategoryName, type: form.type });
       setForm((prev) => ({ ...prev, categoryId: category?.id || prev.categoryId }));
       setQuickCategoryName("");
       setShowCategoryForm(false);
@@ -420,23 +426,34 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
     try {
       setSubmitting(true);
       const isExpense = form.type === "expense";
-      if (!isExpense && !incomeCategories.length) {
-        throw new Error("Kategori pemasukan belum ada. Tambahkan kategori terlebih dahulu.");
+
+      // Kategori wajib untuk semua jenis transaksi
+      if (!form.categoryId) {
+        throw new Error(`Pilih kategori ${isExpense ? "pengeluaran" : "pemasukan"} terlebih dahulu.`);
       }
-      const categoryId = isExpense ? null : form.categoryId || incomeCategories[0]?.id;
-      if (!isExpense && !categoryId) {
-        throw new Error("Pilih kategori pemasukan terlebih dahulu.");
+
+      // Dompet: jika expense + ada alokasi → dompet dari alokasi (otomatis)
+      //         jika expense + tanpa alokasi → wajib pilih dompet manual
+      //         jika income → wajib pilih dompet
+      const accountId = isExpense && selectedBudget?.accountId
+        ? selectedBudget.accountId
+        : form.accountId
+          || incomeWalletOptions.find((a: Account) => a.isActive)?.id
+          || accountBalances.find((a: Account) => a.isActive)?.id
+          || "";
+
+      if (!accountId) {
+        throw new Error("Pilih dompet terlebih dahulu.");
       }
 
       const payload = {
         ...form,
         amount: Number(form.amount),
-        categoryId,
-        accountId: isExpense
-          ? selectedBudget?.accountId || ""
-          : form.accountId || incomeWalletOptions.find((account: Account) => account.isActive)?.id || accountBalances.find((account: Account) => account.isActive)?.id,
-        budgetId: isExpense ? form.budgetId || null : null,
+        categoryId: form.categoryId,
+        accountId,
+        budgetId: isExpense ? (form.budgetId || null) : null,
       };
+
       if (editingTransaction) await updateTransaction(editingTransaction.id, payload);
       else await addTransaction(payload);
       setForm(emptyForm());
@@ -550,7 +567,7 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
                     </div>
                   )}
                   <p className="text-[10px] font-semibold text-muted-foreground">
-                    Parser lokal (on-device), nominal & catatan hanya saran — <b>wajib cek alokasi/dompet</b> sebelum Simpan. Alokasi tetap wajib dipilih untuk pengeluaran.
+                    Parser lokal (on-device), nominal & catatan hanya saran — <b>wajib cek kategori & dompet</b> sebelum Simpan. Alokasi bersifat opsional.
                   </p>
                 </div>
               )}
@@ -596,95 +613,181 @@ export default function TransactionSheet({ open, onClose, editingTransaction = n
             </div>
 
             {form.type === "expense" ? (
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className={labelClassName}>Alokasi Anggaran</label>
-                  {isManager && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllWallets((v) => !v)}
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
-                        showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
-                      )}
-                    >
-                      {showAllWallets ? "Semua dompet" : "Dompet saya"}
-                    </button>
+              <div className="grid gap-3">
+                {/* KATEGORI — wajib untuk expense */}
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className={labelClassName}>Kategori Pengeluaran <span className="text-red">*</span></label>
+                    {canAddCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryForm((v) => !v)}
+                        className="rounded-full border border-line bg-soft px-2.5 py-1 text-[10px] font-black text-rose-dark transition hover:bg-rose-bg"
+                      >
+                        {showCategoryForm ? "Batal" : "+ Tambah"}
+                      </button>
+                    )}
+                  </div>
+                  {showCategoryForm && canAddCategory && (
+                    <form onSubmit={submitQuickCategory} className="flex gap-2">
+                      <input
+                        value={quickCategoryName}
+                        onChange={(e) => setQuickCategoryName(e.target.value)}
+                        placeholder="Nama kategori baru"
+                        className={cn(fieldClassName, "flex-1")}
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingCategory || !quickCategoryName.trim()}
+                        className="h-12 rounded-2xl border border-white/40 px-4 text-sm font-black text-on-accent shadow-accent disabled:opacity-60 [background-image:var(--gradient-brand)]"
+                      >
+                        {savingCategory ? "..." : "Simpan"}
+                      </button>
+                    </form>
+                  )}
+                  <select
+                    value={form.categoryId}
+                    onChange={(event) => setField("categoryId", event.target.value)}
+                    className={cn(fieldClassName, "appearance-none")}
+                    required
+                  >
+                    <option value="">Pilih kategori pengeluaran</option>
+                    {expenseCategories.map((category) => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))}
+                  </select>
+                  {expenseCategories.length === 0 && (
+                    <small className="text-[11px] font-semibold text-muted-foreground">
+                      Belum ada kategori pengeluaran. Klik "+ Tambah" untuk membuat.
+                    </small>
                   )}
                 </div>
-                {!isManager && availableBudgets.length > 0 && (
-                  <small className="text-[10px] font-semibold text-muted-foreground">Hanya alokasi dari dompet milik Anda yang tampil</small>
-                )}
-                {availableBudgets.length === 0 && (
-                  <small className="text-[11px] font-semibold text-muted-foreground">
-                    Belum ada alokasi dari dompet milik Anda di periode ini. Buat alokasi dengan dompet Anda di Anggaran.
-                  </small>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setAllocationPickerOpen(true)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-[20px] border p-3 text-left transition",
-                    selectedBudget ? "border-rose-strong bg-rose-bg" : "border-field-border bg-field-bg"
-                  )}
-                >
-                  {selectedBudget ? (
-                    <>
-                      <span className="grid min-w-0 gap-0.5">
-                        <strong className="truncate text-[13px] font-black text-ink">{selectedBudget.name}</strong>
-                        <small className="truncate text-[11px] font-semibold text-muted-foreground">
-                          {selectedBudgetAccount?.name || "Dompet tidak ditemukan"}
-                        </small>
-                      </span>
-                      <em className="shrink-0 text-xs font-black text-rose-dark not-italic">
-                        {formatRupiah(selectedBudgetUsage?.remaining || 0)} tersisa
-                      </em>
-                    </>
-                  ) : (
-                    <>
-                      <span className="grid min-w-0 gap-0.5">
-                        <strong className="truncate text-[13px] font-black text-ink">Pilih alokasi</strong>
-                        <small className="truncate text-[11px] font-semibold text-muted-foreground">
-                          {availableBudgets.length} alokasi tersedia · {formatBudgetCycleRange(cycle.month, cycle.year)}
-                        </small>
-                      </span>
-                      <em className="shrink-0 text-xs font-black text-rose-dark not-italic">Pilih</em>
-                    </>
-                  )}
-                </button>
 
-                <AllocationPickerModal
-                  open={allocationPickerOpen}
-                  budgets={availableBudgets}
-                  transactions={monthTransactions}
-                  accountBalances={accountBalances}
-                  selectedBudgetId={form.budgetId}
-                  selectedTransactionId={editingTransaction?.id}
-                  onSelect={selectBudget}
-                  onClose={() => setAllocationPickerOpen(false)}
-                  search={allocationSearch}
-                  setSearch={setAllocationSearch}
-                  cycle={cycle}
-                />
+                {/* DOMPET — wajib jika tidak ada alokasi yang dipilih */}
+                {!selectedBudget && (
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className={labelClassName}>Dompet <span className="text-red">*</span></label>
+                      {isManager && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllWallets((v) => !v)}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                            showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
+                          )}
+                        >
+                          {showAllWallets ? "Semua" : "Milik saya"}
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={form.accountId}
+                      onChange={(event) => setField("accountId", event.target.value)}
+                      className={cn(fieldClassName, "appearance-none")}
+                    >
+                      <option value="">Pilih dompet</option>
+                      {incomeWalletOptions.map((account) => (
+                        <option key={account.id} value={account.id}>{account.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                {selectedBudgetUsage ? (
-                  <p
+                {/* ALOKASI ANGGARAN — opsional untuk expense */}
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className={labelClassName}>
+                      Alokasi Anggaran
+                      <span className="ml-1.5 rounded-full border border-line bg-soft px-1.5 py-0.5 text-[9px] font-black text-muted-foreground">OPSIONAL</span>
+                    </label>
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllWallets((v) => !v)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                          showAllWallets ? "border-rose-strong bg-rose-bg text-rose-dark" : "border-line bg-soft text-muted-foreground"
+                        )}
+                      >
+                        {showAllWallets ? "Semua dompet" : "Dompet saya"}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAllocationPickerOpen(true)}
                     className={cn(
-                      "rounded-2xl border p-2.5 text-[11px] leading-relaxed font-semibold",
-                      projectedRemaining !== null && projectedRemaining < 0
-                        ? "border-red-border bg-red-bg text-red"
-                        : "border-line bg-soft text-muted-foreground"
+                      "flex w-full items-center justify-between gap-3 rounded-[20px] border p-3 text-left transition",
+                      selectedBudget ? "border-rose-strong bg-rose-bg" : "border-field-border bg-field-bg hover:border-line"
                     )}
                   >
-                    Sumber: {selectedBudgetAccount?.name || "Dompet tidak ditemukan"} · Sisa setelah transaksi:{" "}
-                    {formatRupiah(projectedRemaining || 0)} dari alokasi {formatRupiah(selectedBudget?.amount || 0)}. Periode reset
-                    tiap tanggal 25.
-                  </p>
-                ) : (
-                  <p className="text-[11px] leading-relaxed font-semibold text-muted-foreground">
-                    Pengeluaran wajib memilih alokasi. Daftar mengikuti periode gajian: tanggal 25 sampai 24 bulan berikutnya.
-                  </p>
-                )}
+                    {selectedBudget ? (
+                      <>
+                        <span className="grid min-w-0 gap-0.5">
+                          <strong className="truncate text-[13px] font-black text-ink">{selectedBudget.name}</strong>
+                          <small className="truncate text-[11px] font-semibold text-muted-foreground">
+                            {selectedBudgetAccount?.name || "Dompet tidak ditemukan"} · {formatRupiah(selectedBudgetUsage?.remaining || 0)} tersisa
+                          </small>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Hapus pilihan alokasi"
+                          onClick={(e) => { e.stopPropagation(); selectBudget(""); }}
+                          className="grid size-7 shrink-0 place-items-center rounded-full border border-line bg-panel text-muted-foreground hover:bg-rose-bg hover:text-red"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="grid min-w-0 gap-0.5">
+                          <strong className="truncate text-[13px] font-black text-muted-foreground">Tidak menggunakan alokasi</strong>
+                          <small className="truncate text-[11px] font-semibold text-muted-foreground">
+                            {availableBudgets.length} alokasi tersedia · {formatBudgetCycleRange(cycle.month, cycle.year)}
+                          </small>
+                        </span>
+                        <em className="shrink-0 text-xs font-black text-rose-dark not-italic">Pilih</em>
+                      </>
+                    )}
+                  </button>
+
+                  <AllocationPickerModal
+                    open={allocationPickerOpen}
+                    budgets={availableBudgets}
+                    transactions={monthTransactions}
+                    accountBalances={accountBalances}
+                    selectedBudgetId={form.budgetId}
+                    selectedTransactionId={editingTransaction?.id}
+                    onSelect={selectBudget}
+                    onClose={() => setAllocationPickerOpen(false)}
+                    search={allocationSearch}
+                    setSearch={setAllocationSearch}
+                    cycle={cycle}
+                  />
+
+                  {selectedBudget && selectedBudgetUsage && (
+                    <p
+                      className={cn(
+                        "rounded-2xl border p-2.5 text-[11px] leading-relaxed font-semibold",
+                        projectedRemaining !== null && projectedRemaining < 0
+                          ? "border-red-border bg-red-bg text-red"
+                          : "border-line bg-soft text-muted-foreground"
+                      )}
+                    >
+                      Dompet: {selectedBudgetAccount?.name || "-"} · Sisa alokasi setelah transaksi:{" "}
+                      <strong>{formatRupiah(projectedRemaining || 0)}</strong> dari {formatRupiah(selectedBudget.amount)}.
+                      {projectedRemaining !== null && projectedRemaining < 0 && " Over budget — tetap bisa disimpan."}
+                    </p>
+                  )}
+
+                  {!selectedBudget && (
+                    <p className="text-[11px] leading-relaxed font-semibold text-muted-foreground">
+                      Pengeluaran tanpa alokasi tetap tercatat dan mengurangi saldo dompet. Pilih alokasi jika ingin memantau sesuai anggaran.
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">

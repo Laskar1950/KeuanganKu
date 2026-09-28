@@ -288,7 +288,7 @@ export const transactions = pgTable(
     check('transactions_amount_check', sql`${table.amount} > 0`),
     check(
       'transactions_check',
-      sql`(${table.type} = 'income' and ${table.categoryId} is not null and ${table.budgetId} is null) or (${table.type} = 'expense' and ${table.categoryId} is null and ${table.budgetId} is not null)`
+      sql`${table.amount} > 0 and ${table.categoryId} is not null and (${table.type} = 'expense' or ${table.budgetId} is null)`
     ),
     pgPolicy('transactions_select_member', {
       for: 'select',
@@ -298,13 +298,13 @@ export const transactions = pgTable(
     pgPolicy('transactions_insert_member_matching_refs', {
       for: 'insert',
       to: authenticatedRole,
-      withCheck: sql`public.is_family_member(${table.familyId}) and ${table.createdBy} = auth.uid() and exists (select 1 from public.accounts a where a.id = ${table.accountId} and a.family_id = ${table.familyId}) and (${table.categoryId} is null or exists (select 1 from public.categories c where c.id = ${table.categoryId} and (c.family_id = ${table.familyId} or c.family_id is null))) and (${table.budgetId} is null or exists (select 1 from public.budgets b where b.id = ${table.budgetId} and b.family_id = ${table.familyId} and b.account_id = ${table.accountId}))`,
+      withCheck: sql`public.is_family_member(${table.familyId}) and ${table.createdBy} = auth.uid() and ${table.categoryId} is not null and exists (select 1 from public.accounts a where a.id = ${table.accountId} and a.family_id = ${table.familyId}) and exists (select 1 from public.categories c where c.id = ${table.categoryId} and (c.family_id = ${table.familyId} or c.family_id is null)) and (${table.budgetId} is null or exists (select 1 from public.budgets b where b.id = ${table.budgetId} and b.family_id = ${table.familyId}))`,
     }),
     pgPolicy('transactions_update_manager_or_creator_matching_refs', {
       for: 'update',
       to: authenticatedRole,
       using: sql`public.is_family_admin_or_owner(${table.familyId}) or ${table.createdBy} = auth.uid()`,
-      withCheck: sql`public.is_family_member(${table.familyId}) and (${table.createdBy} = auth.uid() or public.is_family_admin_or_owner(${table.familyId})) and exists (select 1 from public.accounts a where a.id = ${table.accountId} and a.family_id = ${table.familyId}) and (${table.categoryId} is null or exists (select 1 from public.categories c where c.id = ${table.categoryId} and (c.family_id = ${table.familyId} or c.family_id is null))) and (${table.budgetId} is null or exists (select 1 from public.budgets b where b.id = ${table.budgetId} and b.family_id = ${table.familyId} and b.account_id = ${table.accountId}))`,
+      withCheck: sql`public.is_family_member(${table.familyId}) and (${table.createdBy} = auth.uid() or public.is_family_admin_or_owner(${table.familyId})) and ${table.categoryId} is not null and exists (select 1 from public.accounts a where a.id = ${table.accountId} and a.family_id = ${table.familyId}) and exists (select 1 from public.categories c where c.id = ${table.categoryId} and (c.family_id = ${table.familyId} or c.family_id is null)) and (${table.budgetId} is null or exists (select 1 from public.budgets b where b.id = ${table.budgetId} and b.family_id = ${table.familyId}))`,
     }),
     pgPolicy('transactions_delete_manager', {
       for: 'delete',

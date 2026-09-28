@@ -36,6 +36,11 @@ export interface CategoryExpense {
   amount: number;
 }
 
+/**
+ * Menghitung total pengeluaran per kategori.
+ * Sekarang akurat karena semua expense sudah punya category_id (setelah migrasi).
+ * Expense tanpa kategori (data lama sebelum migrasi) masuk bucket "Tanpa Kategori".
+ */
 export function getExpenseByCategory(transactions: Transaction[], categories: Category[]): CategoryExpense[] {
   const expenseTransactions = transactions.filter((trx) => trx.type === "expense");
   const grouped = expenseTransactions.reduce<Record<string, number>>((acc, trx) => {
@@ -49,6 +54,27 @@ export function getExpenseByCategory(transactions: Transaction[], categories: Ca
       name: categories.find((cat) => cat.id === categoryId)?.name || "Tanpa Kategori",
       amount,
     }))
+    .filter((item) => item.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * Menghitung total pemasukan per kategori.
+ */
+export function getIncomeByCategory(transactions: Transaction[], categories: Category[]): CategoryExpense[] {
+  const incomeTransactions = transactions.filter((trx) => trx.type === "income");
+  const grouped = incomeTransactions.reduce<Record<string, number>>((acc, trx) => {
+    const key = trx.categoryId || "uncategorized";
+    acc[key] = (acc[key] || 0) + Number(trx.amount || 0);
+    return acc;
+  }, {});
+  return Object.entries(grouped)
+    .map(([categoryId, amount]) => ({
+      categoryId,
+      name: categories.find((cat) => cat.id === categoryId)?.name || "Tanpa Kategori",
+      amount,
+    }))
+    .filter((item) => item.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 }
 
@@ -82,7 +108,19 @@ export interface BudgetUsage {
   status: string;
 }
 
+/**
+ * Menghitung pemakaian alokasi anggaran.
+ *
+ * Model baru: transaksi expense bisa punya budget_id (jika user memilih alokasi)
+ * atau tidak (pengeluaran tanpa alokasi). Penggunaan dihitung dari transaksi
+ * yang secara eksplisit terhubung ke budget ini via budget_id.
+ *
+ * Jika budget punya category_id, kita juga menghitung transaksi pada kategori
+ * yang sama yang tidak terhubung ke alokasi manapun (unallocated expenses)
+ * sebagai insight tambahan — tapi itu disimpan terpisah di usedUnallocated.
+ */
 export function getBudgetUsage(budget: Budget, transactions: Transaction[]): BudgetUsage {
+  // Transaksi yang secara langsung dikaitkan ke alokasi ini
   const used = transactions
     .filter((trx) => trx.type === "expense" && trx.budgetId === budget.id)
     .reduce((total, trx) => total + Number(trx.amount || 0), 0);
@@ -93,6 +131,17 @@ export function getBudgetUsage(budget: Budget, transactions: Transaction[]): Bud
   else if (percentage >= 80) status = "Mendekati";
 
   return { used, remaining: Number(budget.amount || 0) - used, percentage, status };
+}
+
+/**
+ * Menghitung total pengeluaran pada kategori tertentu,
+ * termasuk yang tidak punya alokasi (budget_id null).
+ * Berguna untuk laporan "anggaran vs aktual per kategori".
+ */
+export function getCategoryTotalExpense(categoryId: string, transactions: Transaction[]): number {
+  return transactions
+    .filter((trx) => trx.type === "expense" && trx.categoryId === categoryId)
+    .reduce((total, trx) => total + Number(trx.amount || 0), 0);
 }
 
 export function makeId(prefix = "id"): string {

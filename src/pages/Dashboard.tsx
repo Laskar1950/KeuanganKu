@@ -180,6 +180,7 @@ export default function Dashboard({ goTo, onNavigate, onAddTransaction: _onAddTr
     accountBalances,
     transactions,
     budgets,
+    categories,
     notifications = [],
     markNotificationRead,
     markAllNotificationsRead,
@@ -765,7 +766,12 @@ export default function Dashboard({ goTo, onNavigate, onAddTransaction: _onAddTr
                     <strong className="block truncate text-[13px] font-black text-ink">
                       {trx.note || (isIncome ? "Pemasukan" : "Pengeluaran")}
                     </strong>
-                    <p className="text-[11px] text-muted-foreground">{formatDateTime(trx.createdAt || trx.updatedAt || trx.transactionDate)}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {categories.find((c) => c.id === trx.categoryId)?.name
+                        ? `${categories.find((c) => c.id === trx.categoryId)!.name} · `
+                        : ""}
+                      {formatDateTime(trx.createdAt || trx.updatedAt || trx.transactionDate)}
+                    </p>
                   </div>
                   <strong className={cn("shrink-0 text-[12.5px] font-black", isIncome ? "text-green" : "text-red")}>
                     {isIncome ? "+" : "-"}

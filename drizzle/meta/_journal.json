@@ -36,6 +36,13 @@
       "when": 1789613300936,
       "tag": "20260917024820_account_balances_rpc",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790590575073,
+      "tag": "20260928101615_refactor_category_budget_model",
+      "breakpoints": true
     }
   ]
 }

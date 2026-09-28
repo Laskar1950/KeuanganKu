@@ -19,6 +19,7 @@ import {
   getCurrentBudgetCycle,
   isDateInBudgetCycle,
 } from "@/utils/budgetCycle";
+import { getExpenseByCategory } from "@/utils/calculations";
 import { useTrendPeriods, useBalancePoints } from "@/hooks/useTrend";
 import type { Account, Budget, Category, FamilyMember, SavingGoal, Transaction } from "@/types";
 
@@ -238,6 +239,11 @@ export default function Reports() {
       0
     );
   }, [allocationRows]);
+
+  // Pengeluaran per kategori — akurat setelah migrasi (semua expense punya category_id)
+  const expenseByCategoryRows = useMemo(() => {
+    return getExpenseByCategory(filteredTransactions as Transaction[], rawCategories as Category[]);
+  }, [filteredTransactions, rawCategories]);
 
   const donutRows = useMemo(() => {
     const used = allocationRows.filter((budget) => budget.used > 0).sort((a, b) => b.used - a.used);
@@ -568,6 +574,54 @@ export default function Reports() {
             badge={overBudgetTotal > 0 ? "Perlu pantau" : "Terkendali"}
           />
         </motion.div>
+      </section>
+
+      {/* Pengeluaran per Kategori — fitur utama model baru */}
+      <section className="rounded-[28px] border border-line-strong bg-panel-strong/90 p-4 sm:p-5 shadow-soft backdrop-blur-xl">
+        <div className="mb-4">
+          <p className="text-[10px] font-black tracking-[0.13em] text-muted-foreground uppercase">Breakdown</p>
+          <h2 className="font-display text-lg tracking-tight text-ink">Pengeluaran per kategori</h2>
+          <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+            Ke mana uang keluarga pergi bulan ini — dikelompokkan per kategori.
+          </p>
+        </div>
+
+        {expenseByCategoryRows.length > 0 ? (
+          <div className="grid gap-2.5">
+            {expenseByCategoryRows.map((row, idx) => {
+              const percentage = expenseTotal > 0 ? Math.round((row.amount / expenseTotal) * 100) : 0;
+              const color = DONUT_PALETTE[idx % DONUT_PALETTE.length];
+              return (
+                <div key={row.categoryId} className="grid gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />
+                      <span className="truncate text-[13px] font-black text-ink">{row.name}</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-[11px] font-bold text-muted-foreground">{percentage}%</span>
+                      <strong className="text-[13px] font-black text-red">{formatCurrency(row.amount)}</strong>
+                    </div>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-soft">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      whileInView={{ width: `${percentage}%` }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: idx * 0.04 }}
+                      className="h-full rounded-full"
+                      style={{ background: color }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-line bg-soft p-5 text-center text-xs font-semibold text-muted-foreground">
+            Belum ada pengeluaran dengan kategori pada periode ini.
+          </div>
+        )}
       </section>
 
       {/* Target Tabungan (Pencapaian Finansial) */}
